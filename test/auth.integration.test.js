@@ -13,6 +13,7 @@ if (!enabled) {
   const suffix = randomUUID().replaceAll('-', '');
   process.env.DB_SCHEMA = `phase2_test_${suffix}`;
   process.env.AUTH_REDIS_PREFIX = `test:${suffix}:auth:`;
+  process.env.PROVIDER_REDIS_PREFIX = `test:${suffix}:providers:`;
   const { app } = require('../index');
   const sequelize = require('../src/config/postgres.config');
   const redis = require('../src/config/redis.config');
@@ -57,11 +58,11 @@ if (!enabled) {
     transport.sendMail = async message => { mail.push(message); return { accepted: [message.to] }; };
     await sequelize.authenticate();
     await sequelize.createSchema(process.env.DB_SCHEMA);
-    Provider = sequelize.define('Provider', {
-      id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
-      userId: DataTypes.UUID, vehicleProfileId: DataTypes.UUID, kind: DataTypes.STRING, plateNumber: DataTypes.STRING,
-      status: DataTypes.STRING, accepting: { type: DataTypes.BOOLEAN, defaultValue: false }, suspended: { type: DataTypes.BOOLEAN, defaultValue: false },
-    }, { tableName: 'provider_test_links' });
+    Provider = require('../src/models').Provider;
+    Provider.addHook('beforeValidate', 'fixture-defaults', profile => {
+      profile.name ||= 'Provider fixture'; profile.phone ||= '0900000000'; profile.address ||= 'Test address';
+      profile.latitude ??= 10.77; profile.longitude ??= 106.69;
+    });
     DispatchTicket = sequelize.define('DispatchTicket', {
       id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
       vehicleProfileId: DataTypes.UUID, providerId: DataTypes.UUID, status: DataTypes.STRING,
@@ -76,6 +77,8 @@ if (!enabled) {
     if (server) await new Promise(resolve => server.close(resolve));
     const keys = await redis.keys(`${process.env.AUTH_REDIS_PREFIX}*`);
     if (keys.length) await redis.del(...keys);
+    const geoKeys = await redis.keys(`${process.env.PROVIDER_REDIS_PREFIX}*`);
+    if (geoKeys.length) await redis.del(...geoKeys);
     redis.disconnect();
     await sequelize.dropSchema(process.env.DB_SCHEMA, { cascade: true });
     await sequelize.close();
