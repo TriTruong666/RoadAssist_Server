@@ -7,5 +7,7 @@ module.exports = sequelize.define('ProviderLocationHistory', {
   longitude: { type: DataTypes.DOUBLE, allowNull: false },
   speed: { type: DataTypes.FLOAT },
   accuracy: { type: DataTypes.FLOAT },
+  quality: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'UNKNOWN' },
+  usableForDispatch: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false, field: 'usable_for_dispatch' },
   recordedAt: { type: DataTypes.DATE, allowNull: false, field: 'recorded_at' },
 }, { tableName: 'provider_location_history', timestamps: true, updatedAt: false, indexes: [{ fields: ['provider_id', 'createdAt'] }] });

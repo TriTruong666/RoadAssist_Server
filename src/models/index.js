@@ -1,5 +1,7 @@
 const User = require('./user.model');
 const Provider = require('./provider.model');
+const ProviderDocument = require('./provider_document.model');
+const ProviderAuditLog = require('./provider_audit_log.model');
 const ProviderLocationHistory = require('./provider_location_history.model');
 const PendingRegistration = require('./pending_registration.model');
 const AuthSession = require('./auth_session.model');
@@ -19,4 +21,8 @@ VehicleProfile.hasMany(Provider, { as: 'providerLinks', foreignKey: 'vehicleProf
 Provider.belongsTo(VehicleProfile, { as: 'vehicle', foreignKey: 'vehicleProfileId' });
 Provider.hasMany(ProviderLocationHistory, { as: 'locations', foreignKey: 'providerId', onDelete: 'CASCADE' });
 ProviderLocationHistory.belongsTo(Provider, { foreignKey: 'providerId' });
-module.exports = { Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
+Provider.hasMany(ProviderDocument, { as: 'documents', foreignKey: 'providerId', onDelete: 'CASCADE' });
+ProviderDocument.belongsTo(Provider, { foreignKey: 'providerId' });
+Provider.hasMany(ProviderAuditLog, { as: 'auditHistory', foreignKey: 'providerId', onDelete: 'CASCADE' });
+ProviderAuditLog.belongsTo(Provider, { foreignKey: 'providerId' });
+module.exports = { ProviderDocument, ProviderAuditLog, Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
