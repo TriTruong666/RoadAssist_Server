@@ -386,3 +386,23 @@ module.exports = { protect, restrictTo, requireServices };
   feat(user-vehicle): add user registration for 3 roles, onboarding wizard and vehicle profile management apis
   ```
 
+
+---
+
+## 6. Kết quả triển khai (2026-11-02)
+
+- Hoàn thành cả hai đợt chức năng. Theo yêu cầu sau triển khai, lịch sử được tổ chức thành tổng cộng 12 commit: giữ 2 commit hiện có và bổ sung 10 commit Phase 2 theo nhóm chức năng.
+- Models PostgreSQL: `User`, `AuthSession`, `VehicleProfile`, `VehicleRideConfig`; đầy đủ associations, bcrypt cost 12 và hooks tăng `sessionVersion` khi password/status/role/email thay đổi.
+- Đủ 16 API theo bảng hợp đồng; đăng ký không cho tự gán admin, cập nhật profile không cho sửa role/status/services.
+- JWT access/refresh phân biệt mục đích, HS256 với issuer/audience; đối chiếu trạng thái tài khoản, phiên PostgreSQL và `sessionVersion`. Refresh token lưu hash, rotation có khóa transaction; logout/reset password vô hiệu hóa phiên cũ.
+- Redis Lua thực hiện đếm lỗi atomic theo email/IP và challenge OTP dùng một lần, TTL 300 giây, tối đa 3 lần nhập sai, ràng buộc IP và mục đích login/reset. Có cooldown gửi mã 60 giây.
+- SMTP Nodemailer gửi OTP đăng nhập kèm cảnh báo IP lạ và mã reset password. `LOGIN_VERIFICATION_ENABLED=true` mặc định; cần điền SMTP thật để gửi mail. Không có API trả OTP hoặc ghi OTP ra log.
+- Quên mật khẩu trả cùng thông báo cho tài khoản có/không tồn tại. Thay mật khẩu xóa danh sách IP tin cậy và thu hồi các session.
+- Hồ sơ xe có dimension defaults, giới hạn kích thước, chuẩn hóa biển số, SOLO mặc định, CRUD và chọn xe đang dùng có kiểm tra owner trong transaction.
+- Phần thu hồi giấy phép có adapter cho `sequelize.models.Provider`: khi Phase 3 đăng ký model, xóa xe sẽ set liên kết MOBILE_SHOP/TOW sang DENIED, tắt duty, suspend, tháo liên kết và bỏ service tương ứng trong cùng transaction. Đã kiểm thử adapter và rollback bằng model Provider thử nghiệm trong schema riêng; không tạo model Provider production trước Phase 3.
+- Onboarding trả session mới sau khi đổi role. Lựa chọn service provider ở Phase 2 không thay thế duyệt hồ sơ/quyền trực ca ở Phase 3.
+- Seed admin tùy chọn qua `ADMIN_SEED_EMAIL/PASSWORD/PHONE/NAME`, không hardcode mật khẩu, không tự nâng quyền tài khoản đã có.
+- Swagger mô tả đầy đủ 16 operations và payloads. README và `.env.example` có hướng dẫn token rotation, OTP/reset password, reverse proxy và seed admin.
+- Kiểm tra: 12 bài kiểm tra không cần hạ tầng và 17 bài integration PostgreSQL/Redis đều pass; integration tạo schema/Redis namespace riêng và dọn sau chạy, SMTP được giả lập. Chưa kiểm chứng gửi email qua SMTP thật vì chưa có credentials.
+- `npm run dev` khởi động thành công ở cổng 9898; `/health` HTTP 200 với PostgreSQL/Redis `Connected`, `/api-docs/` HTTP 200.
+- Docker image `roadassist-server:phase2` build thành công; kiểm tra import runtime Node 20 trong container thành công.

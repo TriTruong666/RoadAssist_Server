@@ -14,7 +14,8 @@
     "infra:logs": "docker compose -f docker-compose.dev.yml logs -f postgres redis",
     "deploy": "node scripts/deploy.js",
     "docker:prod": "docker compose -f docker-compose.prod.yml up --build -d",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "test:integration": "RUN_DB_TESTS=1 node --test test/auth.integration.test.js"
   },
   "dependencies": {
     "axios": "^1.11.0",
