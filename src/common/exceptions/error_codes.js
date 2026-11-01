@@ -1,4 +1,12 @@
 module.exports = {
+  PROVIDER_EVIDENCE_STALE_UPLOAD: { code: 'PROVIDER_EVIDENCE_STALE_UPLOAD', message: 'Ảnh đã gắn với thông tin cũ, cần cung cấp bằng chứng mới', statusCode: 409 },
+  PROVIDER_CAPABILITIES_REQUIRED: { code: 'PROVIDER_CAPABILITIES_REQUIRED', message: 'Cần khai báo năng lực phục vụ', statusCode: 400 },
+  PROVIDER_CAPABILITY_MISMATCH: { code: 'PROVIDER_CAPABILITY_MISMATCH', message: 'Đối tác không đáp ứng yêu cầu phương tiện hoặc dịch vụ', statusCode: 409 },
+  PROVIDER_CAPACITY_EXHAUSTED: { code: 'PROVIDER_CAPACITY_EXHAUSTED', message: 'Đối tác đã hết chỗ nhận cuốc', statusCode: 409 },
+  PROVIDER_NOT_AVAILABLE: { code: 'PROVIDER_NOT_AVAILABLE', message: 'Đối tác hiện chưa sẵn sàng nhận cuốc', statusCode: 409 },
+  PROVIDER_EVIDENCE_REQUIRED: { code: 'PROVIDER_EVIDENCE_REQUIRED', message: 'Cần bổ sung bằng chứng trước khi duyệt', statusCode: 409 },
+  PROVIDER_DOCUMENT_QUOTA_EXCEEDED: { code: 'PROVIDER_DOCUMENT_QUOTA_EXCEEDED', message: 'Đã đạt giới hạn lưu trữ bằng chứng', statusCode: 409 },
+
   PROVIDER_LOCATION_CONFIRMATION_REQUIRED: { code: 'PROVIDER_LOCATION_CONFIRMATION_REQUIRED', message: 'Có tiệm trong bán kính 300m, vui lòng xác nhận trước khi đăng ký', statusCode: 409 },
   PROVIDER_VEHICLE_INVALID: { code: 'PROVIDER_VEHICLE_INVALID', message: 'Phương tiện hoặc biển số đối tác không hợp lệ', statusCode: 400 },
   PROVIDER_LOCATION_STALE: { code: 'PROVIDER_LOCATION_STALE', message: 'Tọa độ đã cũ hoặc không hợp lệ', statusCode: 409 },
