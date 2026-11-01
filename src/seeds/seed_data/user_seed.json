@@ -1,0 +1,33 @@
+[
+  {
+    "name": "RoadAssist Admin",
+    "email": "admin@roadassist.vn",
+    "password": "M@tkhau123!",
+    "phone": "0900000001",
+    "role": "admin",
+    "services": ["RIDER"],
+    "status": "ACTIVE",
+    "onboarded": true
+  },
+  {
+    "name": "Nguyễn Văn Rider",
+    "email": "rider@roadassist.vn",
+    "password": "M@tkhau123!",
+    "phone": "0900000002",
+    "role": "guest",
+    "services": ["RIDER"],
+    "status": "ACTIVE",
+    "onboarded": true
+  },
+  {
+    "name": "Cứu Hộ Sài Gòn (Provider)",
+    "email": "provider@roadassist.vn",
+    "password": "M@tkhau123!",
+    "phone": "0900000003",
+    "role": "provider",
+    "services": ["RIDER", "SHOP", "MOBILE_SHOP", "TOW"],
+    "status": "ACTIVE",
+    "onboarded": true
+  }
+]
+
