@@ -2,6 +2,8 @@
 
 > **Mục tiêu**: Xây dựng phân hệ Quản lý Đối tác Cứu hộ đường bộ cho 3 loại hình (`SHOP`, `MOBILE_SHOP`, `TOW`), cơ chế xác thực biển số chuẩn Việt Nam, luồng xét duyệt xe kéo dành cho Quản trị viên (`Admin`), quản lý công tắc trực ca (`Duty`), và hệ thống lưu trữ/tìm kiếm tọa độ thời gian thực (Redis GEO Heartbeat).
 
+> **Quy tắc quyền dịch vụ hiện hành:** register/onboard chỉ lưu requestedServices, không cấp services. Khi tạo/duyệt/từ chối/thu hồi/suspend hồ sơ, khóa User và gọi ProviderAccessService.synchronize(user, transaction). Chỉ hồ sơ ACTIVE không suspended mới cấp quyền; MOBILE_SHOP/TOW phải có xe sở hữu đang active, TOW bắt buộc CAR. Sửa thông tin quan trọng của xe đưa hồ sơ đã duyệt về PENDING và tắt duty, kể cả MOBILE_SHOP đã từng được tự duyệt lúc đăng ký lần đầu. Hồ sơ PENDING vì đổi xe phải qua xét duyệt lại trước khi nhận cuốc.
+
 ---
 
 ## 1. Thiết Kế Mô Hình Dữ Liệu (Models & Geo-Spatial)
@@ -169,8 +171,8 @@ Nhịp tim GPS của các đối tác đang bật trực ca được lưu trữ 
 ### 4.1 Phân hệ Đối Tác Cứu Hộ (`/api/v1/providers`)
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
-| `POST` | `/api/v1/providers` | Đăng ký hồ sơ đối tác mới (`SHOP`, `MOBILE_SHOP`, `TOW`) | Bearer Token |
-| `GET` | `/api/v1/providers/me` | Lấy danh sách các giấy phép/hồ sơ đối tác của tài khoản hiện tại | Bearer Token |
+| `POST` | `/api/v1/providers` | Đăng ký hồ sơ đối tác mới (`SHOP`, `MOBILE_SHOP`, `TOW`) | Cookie `road_as_token` |
+| `GET` | `/api/v1/providers/me` | Lấy danh sách các giấy phép/hồ sơ đối tác của tài khoản hiện tại | Cookie `road_as_token` |
 | `GET` | `/api/v1/providers/:id` | Xem chi tiết hồ sơ đối tác và đánh giá | Public / Auth |
 | `PUT` | `/api/v1/providers/:id` | Cập nhật thông tin tiệm (tên, giờ mở cửa, số điện thoại, phân khúc) | Owner (`provider`) |
 | `POST` | `/api/v1/providers/:id/toggle-duty` | Bật/tắt công tắc trực ca (`accepting`). Chặn nếu đang `PENDING`/`DENIED` | Owner (`provider`) |

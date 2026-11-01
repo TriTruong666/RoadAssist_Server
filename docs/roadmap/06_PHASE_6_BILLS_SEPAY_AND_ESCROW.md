@@ -262,7 +262,7 @@ sequenceDiagram
 ### 4.1 Phân hệ Hóa Đơn & Thanh Toán (`/api/v1/payments`)
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
-| `GET` | `/api/v1/bills/my-bills` | Lấy danh sách hóa đơn theo góc nhìn Rider (đếm số hóa đơn chưa trả) | Bearer Token |
+| `GET` | `/api/v1/bills/my-bills` | Lấy danh sách hóa đơn theo góc nhìn Rider (đếm số hóa đơn chưa trả) | Cookie `road_as_token` |
 | `GET` | `/api/v1/bills/:id` | Xem chi tiết hóa đơn hành trình và các hạng mục chi phí | Owner Rider |
 | `POST` | `/api/v1/payments/create-sepay-qr` | Sinh mã thanh toán QR SePay cho hóa đơn / hạng mục | Owner Rider |
 | `POST` | `/api/v1/payments/sepay/webhook` | Webhook tiếp nhận biến động số dư từ SePay, kích hoạt Escrow | Public (SePay Key) |

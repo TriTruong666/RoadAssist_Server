@@ -145,11 +145,11 @@ stateDiagram-v2
 ### 3.1 Phân hệ Cảnh Báo Sự Cố Giao Thông (`/api/v1/flags`)
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
-| `POST` | `/api/v1/flags` | Báo cáo sự cố mới (`category`, `lat`, `lng`, `radiusMeters`, `ttlMinutes`, tối đa 3 ảnh) | Bearer Token |
-| `GET` | `/api/v1/flags/nearby` | Lấy danh sách sự cố còn hiệu lực trong bán kính 2 km quanh tọa độ gửi lên | Bearer Token / Public |
-| `GET` | `/api/v1/flags/my` | Lấy danh sách các sự cố do chính người dùng hiện tại đã báo cáo | Bearer Token |
-| `GET` | `/api/v1/flags/:id` | Xem chi tiết sự cố, số phiếu xác nhận, bình luận và ảnh hiện trường | Bearer Token / Public |
-| `POST` | `/api/v1/flags/:id/vote` | Bình chọn Xác nhận (`CONFIRM`) hoặc Phản đối (`DENY`). Chặn tự vote | Bearer Token |
+| `POST` | `/api/v1/flags` | Báo cáo sự cố mới (`category`, `lat`, `lng`, `radiusMeters`, `ttlMinutes`, tối đa 3 ảnh) | Cookie `road_as_token` |
+| `GET` | `/api/v1/flags/nearby` | Lấy danh sách sự cố còn hiệu lực trong bán kính 2 km quanh tọa độ gửi lên | Cookie `road_as_token` / Public |
+| `GET` | `/api/v1/flags/my` | Lấy danh sách các sự cố do chính người dùng hiện tại đã báo cáo | Cookie `road_as_token` |
+| `GET` | `/api/v1/flags/:id` | Xem chi tiết sự cố, số phiếu xác nhận, bình luận và ảnh hiện trường | Cookie `road_as_token` / Public |
+| `POST` | `/api/v1/flags/:id/vote` | Bình chọn Xác nhận (`CONFIRM`) hoặc Phản đối (`DENY`). Chặn tự vote | Cookie `road_as_token` |
 | `POST` | `/api/v1/flags/:id/unflag` | Tác giả tự gỡ bỏ sự cố khi đường đã thông thoáng | Tác giả báo cáo |
 | `PUT` | `/api/v1/admin/flags/:id/lock` | Quản trị viên khóa xác thực sự cố (`status = "3"`) | Admin (`role=admin`) |
 | `DELETE` | `/api/v1/admin/flags/:id` | Quản trị viên xóa sự cố giả mạo / spam | Admin (`role=admin`) |
@@ -157,11 +157,11 @@ stateDiagram-v2
 ### 3.2 Phân hệ Địa Điểm & Lộ Trình Đã Lưu (`/api/v1/places`)
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
-| `GET` | `/api/v1/places/saved` | Lấy danh sách địa điểm đã lưu của người dùng (Nhà, Công ty...) | Bearer Token |
-| `POST` | `/api/v1/places/saved` | Lưu một địa điểm mới (`name`, `latitude`, `longitude`, `address`, `category`) | Bearer Token |
-| `DELETE` | `/api/v1/places/saved/:id` | Xóa địa điểm đã lưu | Bearer Token |
-| `GET` | `/api/v1/places/routes` | Lấy danh sách các lộ trình đã lưu kèm GeoJSON | Bearer Token |
-| `POST` | `/api/v1/places/routes` | Lưu lộ trình thường đi (tên tối đa 120 ký tự, mảng điểm dừng) | Bearer Token |
+| `GET` | `/api/v1/places/saved` | Lấy danh sách địa điểm đã lưu của người dùng (Nhà, Công ty...) | Cookie `road_as_token` |
+| `POST` | `/api/v1/places/saved` | Lưu một địa điểm mới (`name`, `latitude`, `longitude`, `address`, `category`) | Cookie `road_as_token` |
+| `DELETE` | `/api/v1/places/saved/:id` | Xóa địa điểm đã lưu | Cookie `road_as_token` |
+| `GET` | `/api/v1/places/routes` | Lấy danh sách các lộ trình đã lưu kèm GeoJSON | Cookie `road_as_token` |
+| `POST` | `/api/v1/places/routes` | Lưu lộ trình thường đi (tên tối đa 120 ký tự, mảng điểm dừng) | Cookie `road_as_token` |
 
 ---
 

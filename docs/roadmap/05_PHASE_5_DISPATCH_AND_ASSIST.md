@@ -2,6 +2,8 @@
 
 > **Mục tiêu**: Xây dựng phân hệ nghiệp vụ cốt lõi và phức tạp nhất của RoadAssist: Điều phối cứu hộ đường bộ với **15 Trạng thái (`DISPATCH_STATUS`)**, quản lý xung đột xe đang bận (`HTTP 409`), xử lý 3 luồng dịch vụ chuyên biệt (**Sửa tại tiệm cố định `WALK_IN`**, **Cấp cứu SOS lưu động `MOBILE_SHOP`**, **Xe kéo cứu hộ `TOW`**), cơ chế đếm giờ tính phí chờ (`Waiting Fee`), và chuyển giao tự động khi không sửa được (`Handoff & Retarget`).
 
+> **Ràng buộc vòng đời xe hiện hành:** VehiclePolicyService chặn sửa/xóa xe khi chính xe có ticket mở hoặc Provider gắn xe đang nhận ticket mở của khách khác (HTTP 409 VEHICLE_BUSY). Terminal statuses: 4, 5, 8, 12, 15. Khi tạo/nhận/chuyển ticket, phải khóa theo cùng quy tắc owner → vehicle → provider trước khi đổi trạng thái; không chỉ kiểm tra busy ngoài transaction. Lưu snapshot thông tin xe trong ticket để đổi activeVehicle hoặc cập nhật xe sau khi kết thúc không làm thay đổi lịch sử cuốc.
+
 ---
 
 ## 1. Thiết Kế Mô Hình Dữ Liệu (Models & Schemas)

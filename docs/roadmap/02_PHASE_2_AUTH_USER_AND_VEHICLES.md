@@ -6,7 +6,9 @@
 > **Quy định Kiến trúc Xác thực & Nền tảng Vận hành**:
 > - **100% Vận hành trên Nền tảng Web (Web Application / Web Platform)**: Toàn bộ tương tác của cả 3 đối tượng (Admin trên Web Quản trị, Khách hàng Rider trên Web App, Đối tác Provider trên Web Cứu hộ) đều chạy hoàn toàn trên trình duyệt Web, **tuyệt đối không có ứng dụng di động native**.
 > - **Tuyệt đối KHÔNG sử dụng Firebase Auth hay Firebase SDK**: Toàn bộ dữ liệu tài khoản, mật khẩu băm (`bcrypt`), phiên đăng nhập, `sessionVersion`, IP tin cậy và `webPushToken` đều được lưu trữ và truy vấn trực tiếp trên cơ sở dữ liệu **PostgreSQL thông qua Sequelize ORM (`src/config/postgres.config.js`)**.
-> - Phía Web Application sẽ gọi trực tiếp các API xác thực chuẩn RESTful của RoadAssist Server (`/api/v1/auth/login`, `/api/v1/auth/register`...) và sử dụng Bearer JWT Token do chính máy chủ cấp phát.
+> - Phía Web Application sẽ gọi trực tiếp các API xác thực chuẩn RESTful của RoadAssist Server (`/api/v1/auth/login`, `/api/v1/auth/register`...) và sử dụng cookie HttpOnly `road_as_token` do máy chủ thiết lập.
+
+> **Quyết định nghiệp vụ mới (ưu tiên hơn các ví dụ ban đầu bên dưới):** OTP dùng để xác minh chủ sở hữu email lúc đăng ký, không xác minh IP khi đăng nhập. Đăng nhập tài khoản đã xác minh chỉ cần đúng email/mật khẩu và trạng thái ACTIVE. Lựa chọn dịch vụ lưu ở requestedServices; services chỉ cấp theo hồ sơ đối tác ACTIVE đã được duyệt. Chi tiết hợp đồng hiện hành xem README và Swagger.
 
 ---
 
@@ -86,10 +88,16 @@ const User = sequelize.define(
       allowNull: false,
       field: "session_version",
     },
-    trustedIpRecords: {
-      type: DataTypes.JSONB,
-      defaultValue: [],
-      field: "trusted_ip_records",
+    emailVerifiedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "email_verified_at",
+    },
+    requestedServices: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: ["RIDER"],
+      allowNull: false,
+      field: "requested_services",
     },
     loginIp: {
       type: DataTypes.STRING(50),
@@ -232,27 +240,19 @@ module.exports = VehicleProfile;
 - Sử dụng atomic Lua script trên Redis để tránh race condition khi nhiều luồng brute-force cùng lúc.
 - Khi bị khóa, trả về mã lỗi `AUTH_LOGIN_RATE_LIMITED` kèm trường `retryAfter` (số giây còn lại).
 
-### 2.3 Login Verification (OTP Challenge) & Mail Service
-- `src/services/login_verification.service.js`:
-  - Sinh mã OTP 6 chữ số ngẫu nhiên lưu trong Redis hash (`auth:challenge:<id>`) với TTL 5 phút.
-  - Tối đa 3 lần nhập sai; vượt quá số lần tự động hủy challenge.
-  - Chống replay attack và kiểm tra đúng IP yêu cầu.
-- `src/services/mail.service.js`:
-  - Cấu hình SMTP Nodemailer gửi template mã OTP và thông báo cảnh báo đăng nhập lạ.
+### 2.3 Xác Minh Email Đăng Ký & Mail Service
+- `src/services/email_verification.service.js`: OTP 6 chữ số, Redis hash chứa HMAC, TTL 5 phút, tối đa 3 lần sai, dùng một lần, phân biệt mục đích đăng ký/reset mật khẩu. Không ràng buộc IP.
+- `src/models/pending_registration.model.js`: draft đăng ký lưu PostgreSQL, password đã bcrypt, hết hạn 15 phút. Chưa tạo User/chưa cấp phiên trước OTP đúng.
+- `src/services/mail.service.js`: gửi OTP xác minh email hoặc reset mật khẩu qua Nodemailer. Không gửi OTP đăng nhập.
+- Có resend cooldown 60 giây và rate limit chống spam email. Account cũ chưa xác minh dùng `/auth/send-verification` để gửi mã sau khi nhập đúng mật khẩu.
 
 ### 2.4 Auth Service Độc Lập — `src/services/auth.service.js`
-- `register({ email, password, phone, name })`:
-  - Kiểm tra trùng lặp email và số điện thoại.
-  - Gán role mặc định `"guest"`, mảng services `["RIDER"]`.
-  - Sinh JWT và trả về phiên làm việc.
-- `registerProvider({ email, password, phone, name, providerKind })`:
-  - Tạo tài khoản với role `"provider"`, mảng services khởi tạo `["RIDER", providerKind]`.
-- `login({ email, password, ipAddress, userAgent })`:
-  - Kiểm tra rate limit.
-  - Đối chiếu mật khẩu (`user.comparePassword`).
-  - Kiểm tra IP tin cậy: Nếu là IP mới, kích hoạt luồng OTP (hoặc bypass theo cấu hình).
-  - Cập nhật `loginIp`, `loginAt`, reset rate limiter khi đăng nhập thành công.
-- `completeLogin(...)`: Ghi nhận IP tin cậy và cấp token.
+- `register(...)` và `registerProvider(...)`: validate trùng email/phone đã có tài khoản, lưu draft + password hash, gửi OTP; trả registrationId/challengeId, không trả token.
+- `verifyEmail(...)`: OTP đúng mới tạo User guest, `services: ["RIDER"]`, `requestedServices` theo lựa chọn, emailVerifiedAt và cấp phiên. Alias HTTP `/verify-otp` cũng chỉ xác minh email.
+- `login(...)`: kiểm tra mật khẩu, rate limit, status ACTIVE và email đã xác minh; cấp phiên ngay, không kiểm tra IP tin cậy.
+- `issueSession(...)`: access JWT và refresh JWT rotation, lưu hash refresh token ở AuthSession PostgreSQL.
+- `forgotPassword/resetPassword`: OTP email riêng biệt với OTP đăng ký; reset xác minh chủ mail và thu hồi toàn bộ phiên cũ.
+- `ProviderAccessService`: quyền dịch vụ suy ra từ hồ sơ ACTIVE đã duyệt, không suspended và xe hợp lệ. Không cấp quyền provider qua register/onboard.
 
 ---
 
@@ -268,14 +268,7 @@ const ErrorCodes = require("../common/exceptions/error_codes");
 // Middleware xác thực danh tính
 const protect = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    let token = null;
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.split(" ")[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
-    }
+    const token = req.cookies?.road_as_token;
 
     if (!token) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
@@ -332,28 +325,31 @@ module.exports = { protect, restrictTo, requireServices };
 |---|---|---|---|
 | `POST` | `/api/v1/auth/register` | Đăng ký tài khoản Người đi đường (Rider) (`email`, `password`, `phone`, `name`) | Public |
 | `POST` | `/api/v1/auth/register-provider` | Đăng ký tài khoản Đối tác Cứu hộ (`provider`) | Public |
-| `POST` | `/api/v1/auth/login` | Đăng nhập hệ thống, kiểm tra rate limit & IP verification | Public |
-| `POST` | `/api/v1/auth/verify-otp` | Xác thực mã OTP thử thách khi phát hiện IP mới | Public |
+| `POST` | `/api/v1/auth/login` | Đăng nhập hệ thống, kiểm tra mật khẩu, email đã xác minh & rate limit | Public |
+| `POST` | `/api/v1/auth/verify-otp` | Alias xác minh email đăng ký, không xác minh IP | Public |
+| `POST` | `/api/v1/auth/verify-email` | Xác minh chủ email, hoàn tất đăng ký và cấp phiên | Public |
+| `POST` | `/api/v1/auth/resend-verification` | Gửi lại OTP cho registrationId còn hạn | Public |
+| `POST` | `/api/v1/auth/send-verification` | Gửi OTP cho tài khoản cũ chưa xác minh, yêu cầu email/password | Public |
 | `POST` | `/api/v1/auth/refresh-token` | Làm mới JWT token bằng refresh token | Public |
-| `POST` | `/api/v1/auth/logout` | Đăng xuất, ghi nhận `logoutAt` và xóa session cookie | Bearer Token |
+| `POST` | `/api/v1/auth/logout` | Đăng xuất, ghi nhận `logoutAt` và xóa session cookie | Cookie `road_as_token` |
 | `POST` | `/api/v1/auth/forgot-password` | Gửi email yêu cầu đặt lại mật khẩu | Public |
 | `POST` | `/api/v1/auth/reset-password` | Đặt lại mật khẩu mới thông qua token/OTP | Public |
 
 ### 4.2 Phân hệ Người Dùng & Onboarding (`/api/v1/users`)
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
-| `GET` | `/api/v1/users/me` | Lấy thông tin cá nhân, vai trò, mảng `services`, và xe `activeVehicle` | Bearer Token |
-| `PUT` | `/api/v1/users/me` | Cập nhật thông tin hiển thị (`name`, avatar) | Bearer Token |
-| `PUT` | `/api/v1/users/onboard` | Hoàn thành Onboarding Wizard chọn vai trò và cấu hình ban đầu | Bearer Token |
-| `PUT` | `/api/v1/users/active-vehicle` | Chọn 1 xe làm `activeVehicle` dùng cho định tuyến & gọi cứu hộ | Bearer Token (`RIDER`) |
+| `GET` | `/api/v1/users/me` | Lấy thông tin cá nhân, vai trò, mảng `services`, và xe `activeVehicle` | Cookie `road_as_token` |
+| `PUT` | `/api/v1/users/me` | Cập nhật thông tin hiển thị (`name`, avatar) | Cookie `road_as_token` |
+| `PUT` | `/api/v1/users/onboard` | Hoàn thành Onboarding Wizard chọn vai trò và cấu hình ban đầu | Cookie `road_as_token` |
+| `PUT` | `/api/v1/users/active-vehicle` | Chọn 1 xe làm `activeVehicle` dùng cho định tuyến & gọi cứu hộ | Cookie `road_as_token` (`RIDER`) |
 
 ### 4.3 Phân hệ Phương Tiện (`/api/v1/vehicles`)
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
-| `GET` | `/api/v1/vehicles` | Lấy danh sách hồ sơ xe của người dùng hiện tại kèm cấu hình tải | Bearer Token (`RIDER`) |
-| `POST` | `/api/v1/vehicles` | Tạo hồ sơ xe mới (`type`, `plateNumber`, `width`, `height`), tự gắn `SOLO` | Bearer Token (`RIDER`) |
-| `PUT` | `/api/v1/vehicles/:id` | Sửa thông số xe và cấu hình tải trọng (`RideConfig`) | Bearer Token (`RIDER`) |
-| `DELETE` | `/api/v1/vehicles/:id` | Xóa xe (Cảnh báo: Nếu đang liên kết `TOW` hoặc `MOBILE_SHOP`, tự động thu hồi giấy phép) | Bearer Token (`RIDER`) |
+| `GET` | `/api/v1/vehicles` | Lấy danh sách hồ sơ xe của người dùng hiện tại kèm cấu hình tải | Cookie `road_as_token` (`RIDER`) |
+| `POST` | `/api/v1/vehicles` | Tạo hồ sơ xe mới (`type`, `plateNumber`, `width`, `height`), tự gắn `SOLO` | Cookie `road_as_token` (`RIDER`) |
+| `PUT` | `/api/v1/vehicles/:id` | Sửa thông số xe và cấu hình tải trọng (`RideConfig`) | Cookie `road_as_token` (`RIDER`) |
+| `DELETE` | `/api/v1/vehicles/:id` | Xóa xe (Cảnh báo: Nếu đang liên kết `TOW` hoặc `MOBILE_SHOP`, tự động thu hồi giấy phép) | Cookie `road_as_token` (`RIDER`) |
 
 ---
 
@@ -389,7 +385,7 @@ module.exports = { protect, restrictTo, requireServices };
 
 ---
 
-## 6. Kết quả triển khai (2026-11-02)
+## 6. Kết quả triển khai ban đầu (lịch sử trước điều chỉnh ở mục 7)
 
 - Hoàn thành cả hai đợt chức năng. Theo yêu cầu sau triển khai, lịch sử được tổ chức thành tổng cộng 12 commit: giữ 2 commit hiện có và bổ sung 10 commit Phase 2 theo nhóm chức năng.
 - Models PostgreSQL: `User`, `AuthSession`, `VehicleProfile`, `VehicleRideConfig`; đầy đủ associations, bcrypt cost 12 và hooks tăng `sessionVersion` khi password/status/role/email thay đổi.
@@ -406,3 +402,26 @@ module.exports = { protect, restrictTo, requireServices };
 - Kiểm tra: 12 bài kiểm tra không cần hạ tầng và 17 bài integration PostgreSQL/Redis đều pass; integration tạo schema/Redis namespace riêng và dọn sau chạy, SMTP được giả lập. Chưa kiểm chứng gửi email qua SMTP thật vì chưa có credentials.
 - `npm run dev` khởi động thành công ở cổng 9898; `/health` HTTP 200 với PostgreSQL/Redis `Connected`, `/api-docs/` HTTP 200.
 - Docker image `roadassist-server:phase2` build thành công; kiểm tra import runtime Node 20 trong container thành công.
+
+
+## 7. Điều chỉnh nghiệp vụ Auth và phương tiện
+
+- Đăng ký tạo PendingRegistration (PostgreSQL, password đã bcrypt), gửi OTP email và chưa cấp token/chưa tạo User. OTP đúng mới tạo User với emailVerifiedAt và cấp phiên.
+- Thêm `/auth/verify-email`, `/auth/resend-verification` và `/auth/send-verification` (cho tài khoản cũ chưa xác minh). `/verify-otp` chỉ còn là alias xác minh email.
+- Xóa LoginVerificationService và danh sách IP tin cậy. Đổi mạng/IP không yêu cầu OTP; IP chỉ phục vụ audit/rate limit. OTP email vẫn TTL 300 giây, 3 lần nhập sai, chống replay, cooldown 60 giây.
+- requestedServices là nhu cầu đăng ký; services và role provider được suy ra từ hồ sơ ACTIVE, không suspended, có xe hợp lệ (TOW cần CAR). API onboarding không tự cấp quyền.
+- Sửa/xóa xe bị chặn HTTP 409 khi xe hoặc đối tác gắn xe đang có cuốc mở. Sửa thông tin quan trọng khi xe rảnh đưa hồ sơ đã duyệt về PENDING, tắt duty và thu hồi quyền chờ duyệt lại.
+- Provider/DispatchTicket đầy đủ vẫn thuộc Phase 3/5. Đã kiểm thử các adapter nghiệp vụ qua bảng fixture PostgreSQL trong schema riêng; Phase 5 phải dùng cùng quy tắc khóa bản ghi khi tạo/nhận cuốc để tránh race.
+- SMTP integration dùng transport giả lập trong test; gửi email thật cần cấu hình SMTP.
+- Xác minh sau điều chỉnh: `RUN_DB_TESTS=1 npm test` **39/39 pass**, không skip; bao gồm PostgreSQL/Redis, OTP registration, đăng nhập nhiều IP không gửi OTP, grants theo hồ sơ, xe bận/reapproval/rollback, migration và seed JSON. Docker build và import runtime Node 20 thành công; `/health` và `/api-docs/` trả HTTP 200.
+
+
+## 8. Cookie Authentication
+
+- Mọi API người dùng chỉ đọc access JWT từ cookie HttpOnly `road_as_token`; không nhận Authorization/Bearer hoặc cookie `token` cũ.
+- Refresh JWT lưu trong cookie HttpOnly `road_as_refresh_token`, Path=/api/v1/auth. Refresh endpoint không nhận token trong body và tự rotate cả hai cookie.
+- Login, verify-email/verify-otp và onboarding set cookie; response JSON không chứa token/refreshToken/tokenType. Web dùng fetch credentials: include hoặc Axios withCredentials: true.
+- Development: SameSite=Lax, không Secure. Production: SameSite=None + Secure (HTTPS), giống Core. Expiration theo JWT, set/clear dùng cùng Path/SameSite/Secure.
+- Logout thu hồi phiên qua cookie access hoặc refresh hợp lệ; kể cả access hết hạn vẫn đăng xuất được bằng refresh. Luôn clear cả hai cookie, idempotent khi đã đăng xuất. Reset password cũng clear cookie.
+- CORS chỉ cho origin cấu hình; request browser cross-site ghi dữ liệu mà không có Origin bị từ chối. Swagger dùng cookie security và withCredentials.
+- Xác minh cookie Auth: `RUN_DB_TESTS=1 npm test` **45/45 pass**, gồm cookie-only authentication, không lộ token JSON, refresh rotation/replay, cookie production HttpOnly/Secure, CORS/Origin và logout khi access hết hạn. Docker image `roadassist-server:cookie-auth` build thành công.

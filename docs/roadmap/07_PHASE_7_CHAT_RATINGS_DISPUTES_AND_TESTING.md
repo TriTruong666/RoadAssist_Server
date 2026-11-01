@@ -199,7 +199,7 @@ module.exports = Dispute;
 | Method | Endpoint | Mô Tả Nghiệp Vụ | Phân Quyền |
 |---|---|---|---|
 | `POST` | `/api/v1/disputes` | Gửi khiếu nại cuốc cứu hộ (Kiểm tra trong hạn 7 ngày, đóng băng tiền) | Rider / Provider |
-| `GET` | `/api/v1/disputes/my-disputes` | Xem danh sách khiếu nại của cá nhân | Bearer Token |
+| `GET` | `/api/v1/disputes/my-disputes` | Xem danh sách khiếu nại của cá nhân | Cookie `road_as_token` |
 | `GET` | `/api/v1/admin/disputes` | Quản trị viên xem toàn bộ danh sách khiếu nại đang chờ xử lý | Admin (`role=admin`) |
 | `PUT` | `/api/v1/admin/disputes/:id/resolve` | Phán quyết khiếu nại và gỡ bỏ đóng băng tài chính | Admin (`role=admin`) |
 
