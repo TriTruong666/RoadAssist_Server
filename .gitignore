@@ -1,0 +1,84 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build and distribution
+dist/
+build/
+out/
+.next/
+.serverless/
+output/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs/
+*.log
+
+# Environment variables (MUST stay private)
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test.local
+.env.production
+.env.production.local
+.env*.local
+# DO NOT ignore .env.example or .env.template (used for documentation)
+!.env.example
+!.env.template
+
+# IDE - VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+*.code-workspace
+
+# IDE - IntelliJ/WebStorm
+.idea/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.agents/
+
+Thumbs.db
+desktop.ini
+
+# Local Docker Data (Common naming patterns)
+data/
+db_data/
+pgdata/
+redis_data/
+mongo_data/
+
+# Databases & local sessions
+*.sqlite
+*.db
+session/
+pids/
+*.seed
+local_data/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Documentation
+# Documentation artifacts often shouldn't be in git
+# but markdown files should be.
+# site/
+
+google_key.json
+google_client_secret.json
+
+# Backup files
+backups/

@@ -1,0 +1,44 @@
+{
+  "name": "roadassist-server",
+  "version": "1.0.0",
+  "description": "Hệ thống Backend RoadAssist Server được phát triển bởi IT Team Picare",
+  "license": "ISC",
+  "author": "TriTruong666",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "infra:up": "docker compose -f docker-compose.dev.yml up -d postgres redis",
+    "infra:down": "docker compose -f docker-compose.dev.yml stop postgres redis",
+    "infra:logs": "docker compose -f docker-compose.dev.yml logs -f postgres redis",
+    "deploy": "node scripts/deploy.js",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up --build -d",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "axios": "^1.11.0",
+    "bcrypt": "^6.0.0",
+    "bullmq": "^5.66.5",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.18",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "express-validator": "^7.2.1",
+    "ioredis": "^5.9.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.2.0",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^10.3.1",
+    "pg": "^8.16.3",
+    "sequelize": "^6.37.7",
+    "socket.io": "^4.8.3",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
