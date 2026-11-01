@@ -1,0 +1,14 @@
+const router = require('express').Router();
+const controller = require('../controllers/auth.controller');
+const schema = require('../schemas/auth.schema');
+const validate = require('../middlewares/validate.middleware');
+const { protect } = require('../middlewares/auth.middleware');
+router.post('/register', schema.register, validate, controller.register);
+router.post('/register-provider', schema.registerProvider, validate, controller.registerProvider);
+router.post('/login', schema.login, validate, controller.login);
+router.post('/verify-otp', schema.verifyOtp, validate, controller.verifyOtp);
+router.post('/refresh-token', schema.refresh, validate, controller.refresh);
+router.post('/logout', protect, controller.logout);
+router.post('/forgot-password', schema.forgot, validate, controller.forgot);
+router.post('/reset-password', schema.reset, validate, controller.reset);
+module.exports = router;
