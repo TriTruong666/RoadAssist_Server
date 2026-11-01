@@ -10,6 +10,7 @@ module.exports = {
   registerProvider: [...register(), body('providerKind').isIn(PROVIDER_KINDS)],
   login: [email(), body('password').isString().bail().notEmpty().custom(value => Buffer.byteLength(value) <= 72)],
   verifyOtp: otp(),
-  refresh: [body('refreshToken').isString().bail().isLength({ min: 20, max: 4096 })],
+  resendVerification: [body("registrationId").isUUID(4)],
+  sendVerification: [email(), password()],
   forgot: [email()], reset: [...otp(), password()],
 };

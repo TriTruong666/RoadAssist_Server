@@ -1,3 +1,4 @@
+const { ACCESS_COOKIE } = require("../utils/auth_cookie.util");
 const JWTService = require("../services/jwt.service");
 const {
   UnauthorizedException,
@@ -6,10 +7,7 @@ const {
 const errors = require("../common/exceptions/error_codes");
 async function protect(req, res, next) {
   try {
-    const header = req.headers.authorization;
-    const token = header
-      ? /^Bearer ([^\s]+)$/i.exec(header)?.[1]
-      : req.cookies?.token;
+    const token = req.cookies?.[ACCESS_COOKIE];
     if (!token) throw new UnauthorizedException(errors.UNAUTHORIZED);
     const payload = await JWTService.verifyUserSession(token);
     if (!payload) throw new UnauthorizedException(errors.AUTH_SESSION_EXPIRED);

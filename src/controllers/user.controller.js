@@ -1,6 +1,7 @@
 const UserService = require("../services/user.service");
 const VehicleService = require("../services/vehicle.service");
 const Response = require("../common/response.handler");
+const { setSessionCookies } = require("../utils/auth_cookie.util");
 const { requestContext } = require("../utils/request.util");
 module.exports = {
   me: async (req, res) =>
@@ -10,15 +11,10 @@ module.exports = {
       res,
       await UserService.update(req.user.userId, req.validated),
     ),
-  onboard: async (req, res) =>
-    Response.success(
-      res,
-      await UserService.onboard(
-        req.user.userId,
-        req.validated,
-        requestContext(req),
-      ),
-    ),
+  async onboard(req, res) {
+    const session = await UserService.onboard(req.user.userId, req.validated, requestContext(req));
+    return Response.success(res, setSessionCookies(res, session));
+  },
   activeVehicle: async (req, res) =>
     Response.success(
       res,
