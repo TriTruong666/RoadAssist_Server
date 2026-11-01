@@ -1,4 +1,5 @@
 const User = require('./user.model');
+const PendingRegistration = require('./pending_registration.model');
 const AuthSession = require('./auth_session.model');
 const VehicleProfile = require('./vehicle_profile.model');
 const VehicleRideConfig = require('./vehicle_ride_config.model');
@@ -10,4 +11,4 @@ VehicleProfile.hasOne(VehicleRideConfig, { as: 'rideConfig', foreignKey: 'vehicl
 VehicleRideConfig.belongsTo(VehicleProfile, { foreignKey: 'vehicleProfileId' });
 User.hasMany(AuthSession, { foreignKey: 'userId', sourceKey: 'userId', onDelete: 'CASCADE' });
 AuthSession.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
-module.exports = { User, AuthSession, VehicleProfile, VehicleRideConfig };
+module.exports = { PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };

@@ -67,11 +67,10 @@ const User = sequelize.define(
       allowNull: false,
       field: "session_version",
     },
-    trustedIpRecords: {
-      type: DataTypes.JSONB,
-      defaultValue: [],
-      allowNull: false,
-      field: "trusted_ip_records",
+    emailVerifiedAt: { type: DataTypes.DATE, allowNull: true, field: "email_verified_at" },
+    requestedServices: {
+      type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: ["RIDER"], allowNull: false,
+      field: "requested_services", validate: { supported(value) { if (!value.every(v => SERVICES.includes(v))) throw new Error("Invalid requested service"); } },
     },
     loginIp: { type: DataTypes.STRING(50), field: "login_ip" },
     loginAt: { type: DataTypes.DATE, field: "login_at" },
@@ -86,10 +85,11 @@ const User = sequelize.define(
         user.password = await bcrypt.hash(user.password, 12);
       },
       async beforeUpdate(user) {
+        if (user.changed("email")) user.emailVerifiedAt = null;
         if (user.changed("password"))
           user.password = await bcrypt.hash(user.password, 12);
         if (
-          ["password", "status", "role", "email"].some((field) =>
+          ["password", "status", "role", "email", "emailVerifiedAt"].some((field) =>
             user.changed(field),
           ) &&
           !user.changed("sessionVersion")
@@ -113,6 +113,8 @@ User.prototype.toJSON = function () {
     "avatar",
     "role",
     "services",
+    "requestedServices",
+    "emailVerifiedAt",
     "status",
     "onboarded",
     "activeVehicleId",
