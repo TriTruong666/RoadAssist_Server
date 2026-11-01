@@ -22,13 +22,7 @@ class LocationService {
   static metadataKey(id) {
     return `${config.redisPrefix}provider:duty:${id}`;
   }
-  static fresh(provider) {
-    return (
-      provider.lastHeartbeatAt &&
-      Date.now() - new Date(provider.lastHeartbeatAt).getTime() <
-        config.locationTtlSeconds * 1000
-    );
-  }
+  static fresh(provider) { return require('../utils/gps_quality.util').usable(provider); }
   static async syncProvider(id) {
     try {
       const { Provider, User, VehicleProfile } = sequelize.models;
@@ -56,8 +50,8 @@ class LocationService {
         return true;
       }
       const vehicle = provider.vehicle;
-      const eligible =
-        provider.kind !== "SHOP" &&
+      const availability = await require('./provider_availability.service').describe(provider);
+      const eligible = availability.available && provider.kind !== "SHOP" &&
         provider.status === "ACTIVE" &&
         !provider.suspended &&
         provider.accepting &&

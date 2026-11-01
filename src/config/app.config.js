@@ -18,6 +18,8 @@ const origins = Object.keys(process.env)
   .filter((key) => key.startsWith("ALLOWED_CLIENT_URL_"))
   .map((key) => process.env[key])
   .filter(Boolean);
+const maxAccuracyMeters = Number(process.env.PROVIDER_GPS_MAX_ACCURACY_METERS || 100);
+if (!Number.isFinite(maxAccuracyMeters) || maxAccuracyMeters < 1 || maxAccuracyMeters > 1000) throw new Error('PROVIDER_GPS_MAX_ACCURACY_METERS must be between 1 and 1000');
 module.exports = {
   app: {
     name: process.env.APP_NAME || "RoadAssist-Server",
@@ -99,6 +101,6 @@ module.exports = {
     pingTimeout: integer("SOCKET_PING_TIMEOUT", 60000),
     pingInterval: integer("SOCKET_PING_INTERVAL", 25000),
   },
-  providers: { redisPrefix: process.env.PROVIDER_REDIS_PREFIX || '', locationTtlSeconds: 900 },
+  providers: { redisPrefix: process.env.PROVIDER_REDIS_PREFIX || '', locationTtlSeconds: 900, maxAccuracyMeters, maxPlausibleSpeedMps: 60 },
   swagger: { public: boolean("SWAGGER_PUBLIC") },
 };
