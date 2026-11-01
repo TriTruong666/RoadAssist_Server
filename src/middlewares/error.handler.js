@@ -6,21 +6,41 @@ module.exports = (err, req, res, next) => {
   let descriptor = ErrorCodes.INTERNAL_SERVER_ERROR;
   let details = null;
   if (err instanceof BaseException) {
-    descriptor = { statusCode: err.statusCode, code: err.errorCode, message: err.message };
+    descriptor = {
+      statusCode: err.statusCode,
+      code: err.errorCode,
+      message: err.message,
+    };
     details = err.details;
   } else if (err.name === "SequelizeUniqueConstraintError") {
     descriptor = ErrorCodes.DUPLICATE_ENTRY;
-  } else if (["ValidationError", "SequelizeValidationError"].includes(err.name)) {
+  } else if (
+    ["ValidationError", "SequelizeValidationError"].includes(err.name)
+  ) {
     descriptor = ErrorCodes.VALIDATION_ERROR;
   } else if (err.type === "entity.parse.failed") {
     descriptor = ErrorCodes.BAD_REQUEST;
   } else if (err.type === "entity.too.large") {
     descriptor = ErrorCodes.PAYLOAD_TOO_LARGE;
   }
-  if (descriptor.statusCode === 429 && details?.retryAfter) res.set("Retry-After", String(details.retryAfter));
+  if (descriptor.statusCode === 429 && details?.retryAfter)
+    res.set("Retry-After", String(details.retryAfter));
   if (descriptor.statusCode >= 500) {
     console.error(`[ERROR] ${req.method} ${req.url}`, err);
-    return ResponseHandler.internalError(res, descriptor.message, err, descriptor.code, details, descriptor.statusCode);
+    return ResponseHandler.internalError(
+      res,
+      descriptor.message,
+      err,
+      descriptor.code,
+      details,
+      descriptor.statusCode,
+    );
   }
-  return ResponseHandler.error(res, descriptor.message, descriptor.statusCode, descriptor.code, details);
+  return ResponseHandler.error(
+    res,
+    descriptor.message,
+    descriptor.statusCode,
+    descriptor.code,
+    details,
+  );
 };

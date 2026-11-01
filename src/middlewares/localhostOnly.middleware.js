@@ -17,7 +17,7 @@ const restrictLocalhost = (req, res, next) => {
       res,
       "Access Denied",
       403,
-      "Documentation is only accessible from Localhost"
+      "Documentation is only accessible from Localhost",
     );
   }
 
