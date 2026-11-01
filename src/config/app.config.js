@@ -12,6 +12,8 @@ module.exports = {
     version: process.env.APP_VERSION || "1.0.0",
     env: process.env.NODE_ENV || "development",
     port: integer("SERVER_PORT", 9898),
+    // A comma-separated allowlist of proxy IPs/CIDRs; do not trust arbitrary forwarded headers.
+    trustProxy: process.env.TRUST_PROXY ? process.env.TRUST_PROXY.split(',').map(value => value.trim()).filter(Boolean) : false,
     isProduction: process.env.NODE_ENV === "production",
   },
   db: {
@@ -37,6 +39,10 @@ module.exports = {
     rateLimitEnabled: process.env.LOGIN_RATE_LIMIT_ENABLED !== "false",
     maxAttempts: integer("LOGIN_MAX_ATTEMPTS", 5), windowSeconds: integer("LOGIN_WINDOW_SECONDS", 900),
     trustedIpTtlDays: integer("LOGIN_TRUSTED_IP_TTL_DAYS", 30), maxTrustedIps: integer("LOGIN_MAX_TRUSTED_IPS", 10),
+    keyPrefix: process.env.AUTH_REDIS_PREFIX || "auth:",
+    verificationEnabled: process.env.LOGIN_VERIFICATION_ENABLED !== "false",
+    otpTtlSeconds: 300, otpMaxAttempts: 3,
+    otpSecret: process.env.AUTH_OTP_SECRET || process.env.JWT_SECRET || null,
   },
   mail: {
     host: process.env.SMTP_HOST || "smtp.gmail.com", port: integer("SMTP_PORT", 587),
