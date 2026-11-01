@@ -67,3 +67,41 @@ const paths = {
   '/api/v1/admin/providers/{id}/suspend': { put: operation('Admin suspend or reinstate provider', { withId: true, input: 'ProviderSuspensionRequest', description: 'suspended=false clears the admin restriction but never automatically turns duty on or approves a pending/denied profile.' }) },
 };
 module.exports = { schemas, paths };
+
+// Operational extensions: capabilities, live capacity, private evidence and versioned review history.
+const businessConstants = require('../common/provider.constants');
+const capabilityProperties = {
+  capabilities: { type: 'array', items: text({ enum: businessConstants.CAPABILITIES }), description: 'Repair capabilities for SHOP/MOBILE_SHOP; only TOWING for TOW.' },
+  supportedVehicleTypes: { type: 'array', items: text({ enum: ['BIKE', 'CAR'] }) },
+  maxConcurrentJobs: { type: 'integer', minimum: 1, maximum: 20, default: 1, description: 'SHOP bays; mobile/tow always one shared slot per linked vehicle.' },
+  towMaxWeightKg: { type: 'number', minimum: 1, maximum: 100000 }, towMaxWidth: { type: 'number', minimum: 0.3, maximum: 3 },
+  towMaxHeight: { type: 'number', minimum: 0.5, maximum: 3 }, towMaxLength: { type: 'number', minimum: 0.5, maximum: 20 },
+  towMethods: { type: 'array', items: text({ enum: businessConstants.TOW_METHODS }) },
+};
+for (const name of ['CreateProviderRequest', 'UpdateProviderRequest', 'Provider', 'PublicProvider']) Object.assign(schemas[name].properties, capabilityProperties);
+schemas.Provider.properties.status = text({ enum: ['ACTIVE', 'PENDING', 'DENIED', 'REVOKED'] });
+Object.assign(schemas.Provider.properties, { profileRevision: { type: 'integer' }, reviewedRevision: { type: 'integer', nullable: true }, locationQuality: text({ enum: businessConstants.GPS_QUALITIES }), lastAccuracy: { type: 'number', nullable: true } });
+schemas.ProviderApprovalRequest = { type: 'object', required: ['reason'], properties: { reason: text({ minLength: 1, maxLength: 500 }) } };
+schemas.ProviderAvailability = { type: 'object', properties: { onDuty: { type: 'boolean' }, available: { type: 'boolean' }, state: text({ enum: ['OFF_DUTY', 'UNAVAILABLE', 'BUSY', 'AVAILABLE'] }), reason: text({ nullable: true }), maxConcurrentJobs: { type: 'integer' }, activeJobs: { type: 'integer' }, freeSlots: { type: 'integer' } } };
+Object.assign(schemas.PublicProvider.properties, schemas.ProviderAvailability.properties, { verification: text({ enum: ['AUTO_APPROVED', 'MANUALLY_APPROVED', 'PENDING_REVIEW'] }) });
+Object.assign(schemas.ProviderSearchRequest.properties, {
+  availableOnly: { type: 'boolean', description: 'Require free capacity, declared capabilities, current review and good mobile GPS. acceptingOnly checks only the duty switch.' },
+  requiredCapabilities: capabilityProperties.capabilities, vehicleType: text({ enum: ['BIKE', 'CAR'] }), towMethod: text({ enum: businessConstants.TOW_METHODS }),
+  vehicleWeightKg: capabilityProperties.towMaxWeightKg, vehicleWidth: capabilityProperties.towMaxWidth, vehicleHeight: capabilityProperties.towMaxHeight, vehicleLength: capabilityProperties.towMaxLength,
+});
+paths['/api/v1/admin/providers/{id}/approve'].put = operation('Admin approve evidence-backed profile revision', { withId: true, input: 'ProviderApprovalRequest', description: 'Requires complete matching private evidence, declared capabilities, valid vehicle/license, a reason, and no suspension or open job. Stores an immutable before/after snapshot with evidence hashes. Images tied to old license/vehicle identities cannot approve the new identity.' });
+paths['/api/v1/providers/{id}/availability'] = { get: operation('Get effective duty, availability and capacity', { withId: true, public: true, description: 'onDuty is independent of available. Open tickets consume SHOP bays or the single shared MOBILE_SHOP/TOW vehicle slot. Phase 5 assignment must hold the returned provider lock through its ticket write.' }) };
+paths['/api/v1/providers/{id}/documents'] = {
+  get: operation('List private evidence metadata', { withId: true, description: 'Owner/admin only. Lists withdrawn history and currentForProfile; no raw bytes in JSON.' }),
+  post: operation('Upload private review evidence', { withId: true, created: true, description: 'Owner only, idle profile. JPEG/PNG/WebP, maximum 5MB; image signatures checked. PostgreSQL bytea storage. Approved profiles move to PENDING. Identical current uploads are idempotent. Limits: 10 active/50 total/100MB per profile; 200 total/200MB per owner, including withdrawn history.' }),
+};
+paths['/api/v1/providers/{id}/documents'].post.requestBody = { required: true, content: { 'multipart/form-data': { schema: { type: 'object', required: ['documentType', 'file'], properties: { documentType: text({ enum: businessConstants.DOCUMENT_TYPES }), file: text({ format: 'binary' }) } } } } };
+const documentId = { in: 'path', name: 'documentId', required: true, schema: uuid() };
+paths['/api/v1/providers/{id}/documents/{documentId}/content'] = { get: operation('Download private historical evidence', { withId: true, parameters: [documentId], description: 'Owner/admin only, authenticated cookie. Returns image bytes as an attachment with no-store and nosniff. Historical withdrawn evidence remains privately readable for review traceability.' }) };
+paths['/api/v1/providers/{id}/documents/{documentId}'] = { delete: operation('Withdraw private evidence from future approvals', { withId: true, parameters: [documentId], description: 'Soft withdrawal preserves past review evidence. Approved profile becomes PENDING; busy profiles cannot change evidence.' }) };
+paths['/api/v1/providers/{id}/audit'] = { get: operation('Read private immutable review history', { withId: true, parameters: pagination, description: 'Owner/admin only. Before/after identity, vehicle, capability and document fingerprints; actor, action and reason. No image bytes or background GPS stream.' }) };
+paths['/api/v1/providers/{id}/revoke'].post.description = 'Owner/admin; active jobs block revocation. Sets REVOKED (distinct from DENIED), retains history and releases the live-profile uniqueness slot. Reapplication creates a new profile; admin restrictions remain in force.';
+paths['/api/v1/providers/location'].post.description += ' GPS without accuracy, with accuracy above the configured threshold (default 100m), or with an implausible jump is retained privately but cannot publish discovery. Trusted coordinates are preserved. Responses include locationQuality and usableForDispatch. Suspended/off-duty partners on an existing trip may still record private trip GPS without gaining new-work permission.';
+
+paths['/api/v1/providers'].post.description = 'One live profile per owner/kind; DENIED and REVOKED history do not reserve the slot. Declare capabilities/supportedVehicleTypes before duty; TOW additionally declares its towing envelope. Manual reviews require current private evidence and a reason. First SHOP/MOBILE_SHOP remain AUTO_APPROVED.';
+paths['/api/v1/providers/{id}/documents/{documentId}/content'].get.responses[200] = { description: 'Authenticated private image attachment', headers: { 'Cache-Control': { schema: { type: 'string', example: 'no-store' } } }, content: Object.fromEntries(['image/png', 'image/jpeg', 'image/webp'].map(type => [type, { schema: { type: 'string', format: 'binary' } }])) };

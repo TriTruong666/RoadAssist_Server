@@ -26,9 +26,9 @@ test('SHOP opening hours allow overnight shifts and reject invalid shapes or tim
   assert.equal(validHours({ MONDAY: '08:00-17:00' }), false);
   assert.equal(validHours(['08:00-17:00']), false);
 });
-test('Phase 3 Swagger describes thirteen cookie-authenticated/public operations', () => {
+test('Phase 3 Swagger describes nineteen cookie-authenticated/public operations', () => {
   const { paths } = require('../src/config/provider.swagger');
-  assert.equal(Object.values(paths).reduce((total, item) => total + Object.keys(item).length, 0), 13);
+  assert.equal(Object.values(paths).reduce((total, item) => total + Object.keys(item).length, 0), 19);
   assert.deepEqual(paths['/api/v1/providers/search'].post.security, []);
   assert.deepEqual(paths['/api/v1/admin/providers/{id}/approve'].put.security, [{ cookieAuth: [] }]);
 });
