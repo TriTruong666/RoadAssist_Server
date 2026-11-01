@@ -10,6 +10,7 @@ const { NotFoundException } = require("./src/common/exceptions/BaseException");
 require("./src/models");
 const app = express();
 const server = http.createServer(app);
+app.set("trust proxy", config.app.trustProxy);
 app.use(require("morgan")("dev"));
 app.use(require("cors")({ origin: config.cors, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
@@ -37,6 +38,7 @@ async function startServer() {
   try {
     if (config.db.reset && config.db.force_reset) throw new Error("DB_RESET and DB_FORCE_RESET cannot both be enabled");
     if (config.db.reset) throw new Error("DB_RESET is unsupported; use DB_FORCE_RESET for an explicit full reset");
+    require("./src/services/jwt.service").assertConfigured();
     await sequelize.authenticate();
     await redis.connect();
     await redis.ping();
@@ -44,7 +46,7 @@ async function startServer() {
     // Clear only this configured Redis database when an explicit full reset is requested.
     if (config.db.force_reset) await redis.flushdb();
     await runStartupDatabaseMigrations(sequelize);
-    // RoadAssist admin/config seeds will be enabled after their models exist.
+    await require("./src/seeds/admin.seed").seedSystemAdmin();
     await initJobs();
     await initCronJobs();
     await new Promise((resolve, reject) => {
