@@ -216,3 +216,25 @@ Nhịp tim GPS của các đối tác đang bật trực ca được lưu trữ 
   feat(duty): implement provider duty toggle, background gps heartbeat tracking and redis geo spatial search
   ```
 
+
+
+---
+
+## 6. Kết quả triển khai
+
+- Models Provider và ProviderLocationHistory đã đăng ký thật với associations User/VehicleProfile; có partial unique index ngăn trùng hồ sơ khác DENIED theo owner/kind.
+- Đủ 12 endpoint trong roadmap, bổ sung GET /api/v1/admin/providers/pending để admin xử lý cả MOBILE_SHOP chờ duyệt lại; tất cả quyền người dùng dùng cookie road_as_token.
+- SHOP/MOBILE_SHOP lần đầu được ACTIVE sau validation; TOW PENDING và phải có CAR, biển số khớp xe, licenseNumber trước khi duyệt. Request không thể tự gán status/suspended/services/rating.
+- Cảnh báo 300m trả HTTP 409 kèm details.nearby; confirmNearby=true để xác nhận. Không dùng GPS mobile tắt ca/cũ trong cảnh báo vị trí.
+- Owner quản lý hồ sơ đang chờ/denied mà không cần có role provider trước; quyền nhận cuốc vẫn chỉ lấy từ hồ sơ ACTIVE, không suspended và xe hợp lệ.
+- Admin approve/deny/suspend/resume, owner/admin revoke, resubmit DENIED; lưu reason/reviewer/timestamp. Không thể né đình chỉ bằng revoke rồi tạo mới. Lịch sử cần duyệt lại không được tự ACTIVE qua đăng ký mới.
+- Owner mutation đổi role sẽ set cookie phiên mới; admin mutation có thể khiến owner phải đăng nhập lại bằng mật khẩu khi sessionVersion thay đổi.
+- Bật ca lưu động phải gửi GPS ngay; SHOP không heartbeat. Giờ mở cửa hỗ trợ qua đêm nhưng chỉ là thông tin, accepting là điều kiện nhận mới.
+- GPS lưu lịch sử PostgreSQL; GEO/metadata Redis atomic, freshness 900 giây, version chống callback cũ, sync sau commit. Có fallback SQL khi mất/lỗi cache và cron reconcile/prune mỗi phút, dừng cron khi shutdown.
+- Search bán kính tối đa 50km, lọc kind/rating/duty, sort distance/rating. Public DTO ẩn license, reviewer, userId và tọa độ mobile tắt ca/cũ; owner inactive bị loại ngay cả khi Redis còn dữ liệu mới.
+- Chặn sửa hồ sơ/xe hoặc thu hồi giấy phép khi có cuốc mở. Model DispatchTicket đầy đủ vẫn thuộc Phase 5; hiện test dùng ticket fixture để kiểm chứng ràng buộc. Tắt ca không thu hồi giấy phép; heartbeat của cuốc đang chạy khi tắt ca chỉ lưu riêng tư, không public GEO.
+- Quy tắc TOW thiếu license: được lưu draft hồ sơ PENDING, nhưng admin chưa được approve cho đến khi bổ sung số giấy phép.
+- README và Swagger mô tả 13 operations cùng payload, cookie, cảnh báo vị trí và lifecycle duyệt lại.
+- Xác minh: `RUN_DB_TESTS=1 npm test` **70/70 pass**, không skip; bao gồm regression Auth/cookie/xe và PostgreSQL/Redis thật cho Provider/Duty. Fixture DispatchTicket nằm trong schema test riêng, không tạo model ticket production trước Phase 5.
+- `npm run dev` khởi động trên cổng 9898; `/health` trả HTTP 200 với PostgreSQL/Redis Connected, `/api-docs/` HTTP 200, POST `/api/v1/providers/search` hoạt động trên schema local thật.
+- Docker image `roadassist-server:phase3` build thành công; import runtime Node 20 và Swagger (33 operations kể cả health) thành công.

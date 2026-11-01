@@ -1,6 +1,6 @@
 # RoadAssist Server
 
-Standalone Express API using PostgreSQL/Sequelize and Redis. Phases 1–2 provide the layered skeleton, Auth/User/Vehicle APIs, centralized errors, Swagger and readiness checks. Provider profiles, dispatch, payments, workers and cron schedules follow in later phases. No Firebase or Core Hub connection is used.
+Standalone Express API using PostgreSQL/Sequelize and Redis. Phases 1–3 provide Auth/User/Vehicle and Provider/Duty APIs, PostgreSQL GPS history, Redis GEO discovery, centralized errors, Swagger and readiness checks. Dispatch, payments and other business queues follow in later phases. No Firebase or Core Hub connection is used.
 
 ## Local development
 
@@ -17,15 +17,16 @@ Existing `.env.development` files can be kept. Defaults are HTTP `9898`, Postgre
 
 - `GET /health`: HTTP 200 when PostgreSQL and Redis are reachable; HTTP 503 otherwise.
 - `/api/v1/auth`, `/api/v1/users`, `/api/v1/vehicles`: Phase 2 feature routers; see Swagger for all 19 operations.
+- `/api/v1/providers`, `/api/v1/admin/providers`: Phase 3 provider registration, review, duty and discovery (13 operations).
 - `/api-docs`: Swagger, localhost only unless `SWAGGER_PUBLIC=true`.
 - `npm test`: HTTP validation, authentication guards, response/error, CORS, body limits and readiness tests without external services.
-- `npm run test:integration`: actual PostgreSQL/Redis integration tests. Each run creates and removes its own PostgreSQL schema and Redis namespace; SMTP is stubbed.
+- `npm run test:integration`: actual PostgreSQL/Redis integration tests. Each integration file creates and removes its own PostgreSQL schema and Redis namespaces; SMTP is stubbed. Run `RUN_DB_TESTS=1 npm test` for the complete suite.
 
 JSON and URL-encoded request bodies support up to 10 MB. Error descriptors contain `code`, `message`, `statusCode`; throw a `BaseException` subclass with a descriptor from `src/common/exceptions/error_codes.js`. `ConflictException` is available for HTTP 409.
 
 ## Database and services
 
-Startup synchronizes registered RoadAssist models with `alter: true` and runs RoadAssist-only migrations. Registered models are User, AuthSession, PendingRegistration, VehicleProfile and VehicleRideConfig. Legacy database tables are not removed by cleanup of source files.
+Startup synchronizes registered RoadAssist models with `alter: true` and runs RoadAssist-only migrations. Registered models are User, AuthSession, PendingRegistration, VehicleProfile, VehicleRideConfig, Provider and ProviderLocationHistory. Legacy database tables are not removed by cleanup of source files.
 
 `DB_FORCE_RESET=true` explicitly recreates registered model tables and clears the selected Redis database. Keep it false for normal startup. Legacy partial reset (`DB_RESET=true`) is rejected; enabling both reset flags is rejected as well. Shutdown closes HTTP, Redis and PostgreSQL connections.
 
@@ -97,7 +98,7 @@ Phase 3 approval/revocation operations must lock the owner row and call `Provide
 - When an idle vehicle's type, plate, brand/model, base dimensions or activation changes, linked approved MOBILE_SHOP/TOW profiles move to PENDING, duty is disabled and grants are removed atomically. Update responses include reapprovalRequiredProviders. A resulting role change invalidates old sessions; the user can log in again with their password.
 - Deleting an idle vehicle clears active selection, removes its ride configuration and revokes linked licenses atomically, returning revokedProviders. No license is revoked mid-job.
 
-The Provider and DispatchTicket production models are implemented in Phases 3 and 5. Phase 2 policies use their registered Sequelize interfaces and integration tests exercise those policies against real PostgreSQL fixture tables. Dispatch creation/assignment must use the same owner → vehicle → provider locking protocol, ensuring a new job cannot race a vehicle edit/deletion. Terminal dispatch statuses are 4, 5, 8, 12 and 15. Each future dispatch must snapshot its vehicle details so active selection changes do not rewrite an existing rescue request.
+Provider is now a production Sequelize model. DispatchTicket belongs to Phase 5; current integration tests supply a ticket fixture table to verify busy-provider and vehicle policies. Dispatch creation/assignment must use the same owner → vehicle → provider locking protocol, ensuring a new job cannot race a vehicle edit/deletion. Terminal dispatch statuses are 4, 5, 8, 12 and 15. Each future dispatch must snapshot its vehicle details so active selection changes do not rewrite an existing rescue request.
 
 Email is trimmed/lowercased, phone punctuation removed, and vehicle plates uppercased without whitespace. Passwords and security metadata are excluded from profile responses. Active-vehicle ownership is checked under the user row lock; its association intentionally avoids a circular SQL foreign key.
 
@@ -106,3 +107,45 @@ Email is trimmed/lowercased, phone punctuation removed, and vehicle plates upper
 Optionally set `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_PHONE`, and `ADMIN_SEED_NAME` before startup. Seeding creates an administrator once, never replaces an existing password, and refuses to promote a conflicting existing account. Leave all seed credential variables empty to disable it. The public registration API never assigns administrator privileges.
 
 Seed JSON accounts use requestedServices as service interests; legacy services values are treated as requests. Non-admin seeds start as guest and do not grant provider permissions. Set `emailVerified: true` explicitly only for trusted fixture accounts; public registration always requires email OTP. The existing JSON seed workflow is retained.
+
+## Provider registration and administration (Phase 3)
+
+`POST /api/v1/providers` requires the road_as_token cookie and kind/name/phone/address/latitude/longitude. Supported kinds:
+
+- SHOP: no linked vehicle, at least one serviceSegments entry (SOLO_BIKE/CAR); first registration becomes ACTIVE. Optional MON–SUN openHours use HH:MM-HH:MM and support overnight shifts.
+- MOBILE_SHOP: owned active BIKE/CAR, matching Vietnamese plate and licenseNumber; first registration becomes ACTIVE.
+- TOW: owned active CAR with matching Vietnamese plate; starts PENDING. A licenseNumber must be supplied before admin approval.
+
+Plate normalization removes spaces/dots/hyphens and uppercases the result. Validation uses `^\d{2}[A-Z0-9]{1,3}\d{4,6}$` as specified by the roadmap. The provider's plate must match its linked vehicle.
+
+There is at most one non-DENIED profile per owner/kind, enforced by both row locking and a partial unique PostgreSQL index. Denied/revoked profiles are retained as history. Duplicate SHOP/MOBILE_SHOP locations within 300m return 409 PROVIDER_LOCATION_CONFIRMATION_REQUIRED and details.nearby; retry with confirmNearby=true after the user acknowledges the warning. Off-duty/stale mobile GPS is excluded from these warnings as well as public discovery.
+
+`GET /providers/me` returns owned profiles/history. `GET /providers/:id` returns private review/license information only to the owner/admin; other callers receive a public projection of an approved, non-suspended profile belonging to an active verified account. Private licenses, review reasons, owner IDs and internal cache counters never enter public search/detail responses.
+
+`PUT /providers/:id` updates owner-controlled business details. Clients cannot assign operational status, suspension, ratings or permissions. Vehicle/license identity changes require reapproval; denied profiles require resubmit=true. Once a kind has required manual review, creating a replacement after denial does not bypass that review. SHOP coordinates can be edited here; mobile GPS must use the location API.
+
+Admin cookie endpoints:
+
+- `GET /admin/providers/pending-tows`: paginated TOW applications.
+- `GET /admin/providers/pending`: all pending kinds, optionally ?kind=MOBILE_SHOP, including vehicle/license reapproval.
+- `PUT /admin/providers/:id/approve`: revalidate the vehicle, plate and license, then activate and synchronize operational permissions.
+- `PUT /admin/providers/:id/deny`: requires reason; denial is only valid for pending profiles.
+- `PUT /admin/providers/:id/suspend`: suspended=true plus reason disables duty/grants; suspended=false removes the restriction but never turns duty on or automatically approves a profile.
+
+Admin suspensions remain effective across owner revoke/re-register attempts until explicitly cleared by an admin. Admin can still suspend/deny/revoke an inactive owner's profile, while approval requires an active verified owner. Owner changes that affect their role replace their cookie session; changes made by an admin may invalidate the affected owner's existing session, requiring password login again (no IP OTP).
+
+## Duty, location history and geographic search
+
+`POST /providers/:id/toggle-duty` takes accepting as an explicit boolean. Only ACTIVE, non-suspended profiles with a valid linked vehicle can switch duty. Mobile activation also requires current latitude/longitude immediately; SHOP never sends a GPS heartbeat. Opening hours are informational: accepting is the actual gate for new rescue requests.
+
+`POST /providers/location` requires providerId, latitude and longitude. It accepts optional speed (m/s), accuracy (meters), and recordedAt (ISO timestamp). Only owned MOBILE_SHOP/TOW profiles can submit it. On-duty positions are persisted to PostgreSQL history and used to update the current provider position. An off-duty provider may submit private trip GPS only while assigned to an open dispatch; it is never added to public discovery. Rider/SHOP background positions are rejected.
+
+Clients should submit GPS immediately on duty activation, every 300 seconds when idle, and every 60 seconds during an active rescue/navigation session. Server receive time controls the 900-second freshness window. Older/replayed capture timestamps are rejected; recordedAt must be within the last 15 minutes with at most two minutes of forward clock skew.
+
+Redis uses geo:providers:active, geo:providers:heartbeat and provider:duty:<id> (optionally prefixed by PROVIDER_REDIS_PREFIX). Atomic Lua updates coordinate GEO membership, TTL metadata and monotonic cache versions. Profile save hooks publish after PostgreSQL commit. Duty off, denial, suspension, vehicle reapproval and license revocation remove discovery immediately. A late cache update cannot undo a newer state change.
+
+A non-overlapping cron task prunes stale members and reconciles fresh positions every minute and on startup; shutdown stops that task. Redis errors do not roll back a committed PostgreSQL position. Search validates Redis candidates against PostgreSQL and fills missing members from fresh SQL data, including after cache loss. Stale GPS and invalid/inactive accounts/vehicles cannot become eligible through the fallback.
+
+`POST /providers/search` accepts latitude/longitude plus optional radiusKm (maximum 50), kinds, minRating, acceptingOnly, sortBy (distance/rating), and limit (maximum 100). It returns public providers with distanceMeters and effective available state. Mobile results always require accepting=true and a heartbeat within 15 minutes, even when acceptingOnly=false. Off-duty/stale mobile details hide coordinates; fixed SHOP locations remain public.
+
+Active rescue dispatches block vehicle/profile identity changes and license revocation in the same transaction. Turning duty off stops new discovery without revoking the license or interrupting existing trip history. Phase 5 assignment must recheck provider approval/suspension, accepting, vehicle validity and mobile GPS freshness under the shared owner → vehicle → provider locking protocol; search results alone are not authorization.
