@@ -1,8 +1,8 @@
-const { createHash } = require('node:crypto');
-const redis = require('../config/redis.config');
-const config = require('../config/app.config');
-const { BaseException } = require('../common/exceptions/BaseException');
-const errors = require('../common/exceptions/error_codes');
+const { createHash } = require("node:crypto");
+const redis = require("../config/redis.config");
+const config = require("../config/app.config");
+const { BaseException } = require("../common/exceptions/BaseException");
+const errors = require("../common/exceptions/error_codes");
 const CHECK = `
 local limited = false
 local retry = 0
@@ -28,21 +28,38 @@ end
 return {limited and 1 or 0, retry}
 `;
 class LoginRateLimitService {
-  static keys({ email, ipAddress }, purpose = 'login') {
-    const hash = value => createHash('sha256').update(String(value)).digest('hex');
-    return [`${config.login.keyPrefix}rate:${purpose}:ip:${hash(ipAddress)}`, `${config.login.keyPrefix}rate:${purpose}:email:${hash(email.toLowerCase())}`];
+  static keys({ email, ipAddress }, purpose = "login") {
+    const hash = (value) =>
+      createHash("sha256").update(String(value)).digest("hex");
+    return [
+      `${config.login.keyPrefix}rate:${purpose}:ip:${hash(ipAddress)}`,
+      `${config.login.keyPrefix}rate:${purpose}:email:${hash(email.toLowerCase())}`,
+    ];
   }
   static limited(retryAfter) {
-    return new BaseException(errors.AUTH_LOGIN_RATE_LIMITED, { retryAfter: Math.max(1, Number(retryAfter)) });
+    return new BaseException(errors.AUTH_LOGIN_RATE_LIMITED, {
+      retryAfter: Math.max(1, Number(retryAfter)),
+    });
   }
   static async assertAllowed(context) {
     if (!config.login.rateLimitEnabled) return;
-    const [limited, retry] = await redis.eval(CHECK, 2, ...this.keys(context), config.login.maxAttempts);
+    const [limited, retry] = await redis.eval(
+      CHECK,
+      2,
+      ...this.keys(context),
+      config.login.maxAttempts,
+    );
     if (limited) throw this.limited(retry);
   }
   static async recordFailure(context) {
     if (!config.login.rateLimitEnabled) return;
-    const [limited, retry] = await redis.eval(FAILURE, 2, ...this.keys(context), config.login.windowSeconds, config.login.maxAttempts);
+    const [limited, retry] = await redis.eval(
+      FAILURE,
+      2,
+      ...this.keys(context),
+      config.login.windowSeconds,
+      config.login.maxAttempts,
+    );
     if (limited) throw this.limited(retry);
   }
   static async clearAccountFailures(context) {
@@ -50,7 +67,13 @@ class LoginRateLimitService {
     // Keep the shared IP counter: authenticating one account must not unlock an attacking IP.
   }
   static async limitResetRequest(context) {
-    const [limited, retry] = await redis.eval(FAILURE, 2, ...this.keys(context, 'password-reset'), 900, 6);
+    const [limited, retry] = await redis.eval(
+      FAILURE,
+      2,
+      ...this.keys(context, "password-reset"),
+      900,
+      6,
+    );
     if (limited) throw this.limited(retry);
   }
 }

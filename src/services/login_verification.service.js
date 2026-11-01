@@ -1,9 +1,12 @@
-const crypto = require('node:crypto');
-const redis = require('../config/redis.config');
-const config = require('../config/app.config');
-const errors = require('../common/exceptions/error_codes');
-const { BaseException, BadRequestException } = require('../common/exceptions/BaseException');
-const MailService = require('./mail.service');
+const crypto = require("node:crypto");
+const redis = require("../config/redis.config");
+const config = require("../config/app.config");
+const errors = require("../common/exceptions/error_codes");
+const {
+  BaseException,
+  BadRequestException,
+} = require("../common/exceptions/BaseException");
+const MailService = require("./mail.service");
 const CREATE = `
 if redis.call('EXISTS', KEYS[3]) == 1 then return 0 end
 local previous = redis.call('GET', KEYS[2])
@@ -30,34 +33,83 @@ return result
 `;
 class LoginVerificationService {
   static hashCode(id, code) {
-    if (!config.login.otpSecret) throw new Error('OTP secret is not configured');
-    return crypto.createHmac('sha256', config.login.otpSecret).update(`${id}:${code}`).digest('hex');
+    if (!config.login.otpSecret)
+      throw new Error("OTP secret is not configured");
+    return crypto
+      .createHmac("sha256", config.login.otpSecret)
+      .update(`${id}:${code}`)
+      .digest("hex");
   }
-  static pointer(userId, purpose) { return `${config.login.keyPrefix}challenge-active:${purpose}:${userId}`; }
-  static async createChallenge({ user, ipAddress, purpose = 'login' }) {
+  static pointer(userId, purpose) {
+    return `${config.login.keyPrefix}challenge-active:${purpose}:${userId}`;
+  }
+  static async createChallenge({ user, ipAddress, purpose = "login" }) {
     const challengeId = crypto.randomUUID();
-    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
     const key = `${config.login.keyPrefix}challenge:${challengeId}`;
     const pointer = this.pointer(user.userId, purpose);
-    const created = await redis.eval(CREATE, 3, key, pointer, `${pointer}:cooldown`, user.userId, this.hashCode(challengeId, code), ipAddress, purpose, user.sessionVersion, config.login.otpTtlSeconds, challengeId, `${config.login.keyPrefix}challenge:`);
-    if (!created) throw new BaseException(errors.AUTH_LOGIN_RATE_LIMITED, { retryAfter: Math.max(1, await redis.ttl(`${pointer}:cooldown`)) });
+    const created = await redis.eval(
+      CREATE,
+      3,
+      key,
+      pointer,
+      `${pointer}:cooldown`,
+      user.userId,
+      this.hashCode(challengeId, code),
+      ipAddress,
+      purpose,
+      user.sessionVersion,
+      config.login.otpTtlSeconds,
+      challengeId,
+      `${config.login.keyPrefix}challenge:`,
+    );
+    if (!created)
+      throw new BaseException(errors.AUTH_LOGIN_RATE_LIMITED, {
+        retryAfter: Math.max(1, await redis.ttl(`${pointer}:cooldown`)),
+      });
     try {
-      const method = purpose === 'login' ? 'sendLoginVerificationMail' : 'sendPasswordResetMail';
+      const method =
+        purpose === "login"
+          ? "sendLoginVerificationMail"
+          : "sendPasswordResetMail";
       await MailService[method]({ to: user.email, code, ipAddress });
     } catch (error) {
       await redis.del(key);
       // The pointer is harmless once its challenge is gone; never delete a newer challenge's pointer.
       throw new BaseException(errors.AUTH_MAIL_UNAVAILABLE);
     }
-    const [local, domain] = user.email.split('@');
-    return { challengeId, expiresIn: config.login.otpTtlSeconds, maskedEmail: `${local[0]}***@${domain}` };
+    const [local, domain] = user.email.split("@");
+    return {
+      challengeId,
+      expiresIn: config.login.otpTtlSeconds,
+      maskedEmail: `${local[0]}***@${domain}`,
+    };
   }
-  static async verifyChallenge({ challengeId, code, ipAddress, purpose = 'login' }) {
+  static async verifyChallenge({
+    challengeId,
+    code,
+    ipAddress,
+    purpose = "login",
+  }) {
     const key = `${config.login.keyPrefix}challenge:${challengeId}`;
-    const userId = await redis.hget(key, 'userId');
-    const pointer = this.pointer(userId || 'missing', purpose);
-    const [status, value, version] = await redis.eval(VERIFY, 2, key, pointer, ipAddress, this.hashCode(challengeId, code), purpose, config.login.otpMaxAttempts, challengeId);
-    if (status !== 'VERIFIED') throw new BadRequestException(errors.AUTH_OTP_INVALID_OR_EXPIRED, value === undefined ? null : { attemptsRemaining: Number(value) });
+    const userId = await redis.hget(key, "userId");
+    const pointer = this.pointer(userId || "missing", purpose);
+    const [status, value, version] = await redis.eval(
+      VERIFY,
+      2,
+      key,
+      pointer,
+      ipAddress,
+      this.hashCode(challengeId, code),
+      purpose,
+      config.login.otpMaxAttempts,
+      challengeId,
+    );
+    if (status !== "VERIFIED")
+      throw new BadRequestException(
+        errors.AUTH_OTP_INVALID_OR_EXPIRED,
+        value === undefined ? null : { attemptsRemaining: Number(value) },
+      );
     return { userId: value, sessionVersion: Number(version) };
   }
 }
