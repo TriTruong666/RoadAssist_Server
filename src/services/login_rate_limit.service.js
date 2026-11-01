@@ -32,8 +32,8 @@ class LoginRateLimitService {
     const hash = (value) =>
       createHash("sha256").update(String(value)).digest("hex");
     return [
-      `${config.login.keyPrefix}rate:${purpose}:ip:${hash(ipAddress)}`,
-      `${config.login.keyPrefix}rate:${purpose}:email:${hash(email.toLowerCase())}`,
+      `${config.emailVerification.keyPrefix}rate:${purpose}:ip:${hash(ipAddress)}`,
+      `${config.emailVerification.keyPrefix}rate:${purpose}:email:${hash(email.toLowerCase())}`,
     ];
   }
   static limited(retryAfter) {
@@ -65,6 +65,20 @@ class LoginRateLimitService {
   static async clearAccountFailures(context) {
     if (config.login.rateLimitEnabled) await redis.del(this.keys(context)[1]);
     // Keep the shared IP counter: authenticating one account must not unlock an attacking IP.
+  }
+  static async limitEmailRequest(context, purpose = 'registration') {
+    const [limited, retry] = await redis.eval(`
+      local limited = false
+      local retry = 0
+      for i,key in ipairs(KEYS) do
+        local count = redis.call('INCR', key)
+        if count == 1 then redis.call('EXPIRE', key, 900) end
+        local maximum = i == 1 and 60 or 5
+        if count > maximum then limited = true; retry = math.max(retry, redis.call('TTL', key)) end
+      end
+      return {limited and 1 or 0, retry}
+    `, 2, ...this.keys(context, purpose));
+    if (limited) throw this.limited(retry);
   }
   static async limitResetRequest(context) {
     const [limited, retry] = await redis.eval(

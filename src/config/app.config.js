@@ -58,14 +58,17 @@ module.exports = {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "30d",
   },
+  cookies: {
+    secure: process.env.NODE_ENV === "production",
+    sameSite: (process.env.AUTH_COOKIE_SAME_SITE || (process.env.NODE_ENV === "production" ? "none" : "lax")).toLowerCase(),
+  },
   login: {
     rateLimitEnabled: process.env.LOGIN_RATE_LIMIT_ENABLED !== "false",
     maxAttempts: integer("LOGIN_MAX_ATTEMPTS", 5),
     windowSeconds: integer("LOGIN_WINDOW_SECONDS", 900),
-    trustedIpTtlDays: integer("LOGIN_TRUSTED_IP_TTL_DAYS", 30),
-    maxTrustedIps: integer("LOGIN_MAX_TRUSTED_IPS", 10),
-    keyPrefix: process.env.AUTH_REDIS_PREFIX || "auth:",
-    verificationEnabled: process.env.LOGIN_VERIFICATION_ENABLED !== "false",
+  },
+  emailVerification: {
+    keyPrefix: process.env.AUTH_REDIS_PREFIX || "auth:v2:",
     otpTtlSeconds: 300,
     otpMaxAttempts: 3,
     otpSecret: process.env.AUTH_OTP_SECRET || process.env.JWT_SECRET || null,

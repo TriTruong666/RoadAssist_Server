@@ -2,10 +2,12 @@ const { randomUUID, createHash, timingSafeEqual } = require("node:crypto");
 const bcrypt = require("bcrypt");
 const sequelize = require("../config/postgres.config");
 const config = require("../config/app.config");
-const { User, AuthSession } = require("../models");
+const { User, AuthSession, PendingRegistration } = require("../models");
+const { Op } = require("sequelize");
+const ProviderAccess = require("./provider_access.service");
 const JWTService = require("./jwt.service");
 const RateLimit = require("./login_rate_limit.service");
-const Verification = require("./login_verification.service");
+const Verification = require("./email_verification.service");
 const {
   BaseException,
   UnauthorizedException,
@@ -19,15 +21,6 @@ class AuthService {
   static hash(token) {
     return createHash("sha256").update(token).digest("hex");
   }
-  static normalizeTrustedIps(user) {
-    return (user.trustedIpRecords || [])
-      .filter(
-        (record) =>
-          record.ipAddress && Date.parse(record.expiresAt) > Date.now(),
-      )
-      .sort((a, b) => Date.parse(b.lastUsedAt) - Date.parse(a.lastUsedAt))
-      .slice(0, config.login.maxTrustedIps);
-  }
   static assertUser(user, expectedVersion) {
     if (
       !user ||
@@ -38,6 +31,9 @@ class AuthService {
     }
   }
   static async issueSession(user, context, transaction, session = null) {
+    this.assertUser(user);
+    if (!user.emailVerifiedAt) throw new BaseException(errors.AUTH_EMAIL_NOT_VERIFIED);
+    await ProviderAccess.synchronize(user, transaction);
     JWTService.assertConfigured();
     const id = session?.id || randomUUID();
     const refreshToken = jwt.sign(
@@ -75,54 +71,79 @@ class AuthService {
         { jwtid: id },
       ),
       refreshToken,
-      tokenType: "Bearer",
       requiresVerification: false,
       user: user.toJSON(),
     };
   }
-  static async recordLogin(user, context, transaction) {
-    const now = new Date();
-    const records = this.normalizeTrustedIps(user).filter(
-      (record) => record.ipAddress !== context.ipAddress,
-    );
-    records.unshift({
-      ipAddress: context.ipAddress,
-      trustedAt: now.toISOString(),
-      lastUsedAt: now.toISOString(),
-      expiresAt: new Date(
-        now.getTime() + config.login.trustedIpTtlDays * 86400000,
-      ).toISOString(),
-      userAgent: (context.userAgent || "").slice(0, 512),
-    });
-    await user.update(
-      {
-        trustedIpRecords: records.slice(0, config.login.maxTrustedIps),
-        loginIp: context.ipAddress,
-        loginAt: now,
-      },
-      { transaction },
-    );
+  static recordLogin(user, context, transaction) {
+    // IP is audit metadata only. It never triggers an authentication challenge.
+    return user.update({ loginIp: context.ipAddress, loginAt: new Date() }, { transaction });
   }
   static async register(data, context, provider = false) {
+    await RateLimit.limitEmailRequest({ email: data.email, ...context });
+    const existing = await User.findOne({ where: { [Op.or]: [{ email: data.email }, { phone: data.phone }] } });
+    if (existing) throw new ConflictException(errors.USER_ALREADY_EXISTS);
+    await PendingRegistration.destroy({ where: { expiresAt: { [Op.lt]: new Date() } } });
+    const draft = await PendingRegistration.create({
+      email: data.email, phone: data.phone, name: data.name,
+      passwordHash: await bcrypt.hash(data.password, 12),
+      requestedServices: provider ? ['RIDER', data.providerKind] : ['RIDER'],
+      expiresAt: new Date(Date.now() + 15 * 60000),
+    });
     try {
-      return await sequelize.transaction(async (transaction) => {
-        const user = await User.create(
-          {
-            email: data.email,
-            password: data.password,
-            phone: data.phone,
-            name: data.name,
-            role: provider ? "provider" : "guest",
-            services: provider ? ["RIDER", data.providerKind] : ["RIDER"],
-          },
-          { transaction },
-        );
+      const challenge = await Verification.createChallenge({ user: draft, purpose: 'registration' });
+      return { requiresVerification: true, verificationPurpose: 'registration', registrationId: draft.id, ...challenge };
+    } catch (error) {
+      await draft.destroy();
+      throw error;
+    }
+  }
+  static async resendVerification({ registrationId }, context) {
+    const draft = await PendingRegistration.findByPk(registrationId);
+    if (!draft || draft.expiresAt <= new Date()) throw new BaseException(errors.AUTH_OTP_INVALID_OR_EXPIRED);
+    await RateLimit.limitEmailRequest({ email: draft.email, ...context });
+    const challenge = await Verification.createChallenge({ user: draft, purpose: 'registration' });
+    return { requiresVerification: true, verificationPurpose: 'registration', registrationId, ...challenge };
+  }
+  static async sendVerification({ email, password }, context) {
+    // Existing unverified accounts prove their password before an email can be sent.
+    await RateLimit.assertAllowed({ email, ...context });
+    const user = await User.findOne({ where: { email } });
+    const matched = await bcrypt.compare(password, user?.password || INVALID_HASH);
+    if (!user || !matched) {
+      await RateLimit.recordFailure({ email, ...context });
+      throw new UnauthorizedException(errors.AUTH_INVALID_CREDENTIALS);
+    }
+    this.assertUser(user);
+    if (user.emailVerifiedAt) return { emailVerified: true };
+    await RateLimit.limitEmailRequest({ email, ...context }, 'email-verification');
+    return { requiresVerification: true, verificationPurpose: 'email-verification', ...await Verification.createChallenge({ user, purpose: 'email-verification' }) };
+  }
+  static async verifyEmail(data, context) {
+    const purpose = await Verification.purpose(data.challengeId);
+    if (!['registration', 'email-verification'].includes(purpose)) throw new BaseException(errors.AUTH_OTP_INVALID_OR_EXPIRED);
+    const verified = await Verification.verifyChallenge({ ...data, purpose });
+    try {
+      return await sequelize.transaction(async transaction => {
+        let user;
+        if (purpose === 'registration') {
+          const draft = await PendingRegistration.findByPk(verified.subjectId, { transaction, lock: transaction.LOCK.UPDATE });
+          if (!draft || draft.expiresAt <= new Date() || draft.email !== verified.email) throw new BaseException(errors.AUTH_OTP_INVALID_OR_EXPIRED);
+          // The draft already contains a bcrypt hash. No plaintext password is persisted between requests.
+          user = await User.create({ email: draft.email, name: draft.name, phone: draft.phone, password: draft.passwordHash,
+            requestedServices: draft.requestedServices, services: ['RIDER'], role: 'guest', emailVerifiedAt: new Date() }, { transaction, hooks: false });
+          await draft.destroy({ transaction });
+        } else {
+          user = await User.findOne({ where: { userId: verified.subjectId }, transaction, lock: transaction.LOCK.UPDATE });
+          this.assertUser(user, verified.sessionVersion);
+          if (user.email !== verified.email) throw new BaseException(errors.AUTH_OTP_INVALID_OR_EXPIRED);
+          await user.update({ emailVerifiedAt: new Date() }, { transaction });
+        }
         await this.recordLogin(user, context, transaction);
         return this.issueSession(user, context, transaction);
       });
     } catch (error) {
-      if (error.name === "SequelizeUniqueConstraintError")
-        throw new ConflictException(errors.USER_ALREADY_EXISTS);
+      if (error.name === 'SequelizeUniqueConstraintError') throw new ConflictException(errors.USER_ALREADY_EXISTS);
       throw error;
     }
   }
@@ -159,30 +180,14 @@ class AuthService {
     }
     if (user.status !== "ACTIVE")
       throw new UnauthorizedException(errors.AUTH_ACCOUNT_INACTIVE);
-    const trusted = this.normalizeTrustedIps(user).some(
-      (record) => record.ipAddress === context.ipAddress,
-    );
-    if (config.login.verificationEnabled && !trusted) {
-      const challenge = await Verification.createChallenge({
-        user,
-        ipAddress: context.ipAddress,
-      });
-      return { requiresVerification: true, ...challenge };
-    }
+    if (!user.emailVerifiedAt) throw new BaseException(errors.AUTH_EMAIL_NOT_VERIFIED);
     return this.completeLogin({
       userId: user.userId,
       sessionVersion: user.sessionVersion,
       ...context,
     });
   }
-  static async verifyLogin(data, context) {
-    const verified = await Verification.verifyChallenge({
-      ...data,
-      ipAddress: context.ipAddress,
-    });
-    return this.completeLogin({ ...verified, ...context });
-  }
-  static async refresh(refreshToken, context) {
+  static async withRefreshSession(refreshToken, action) {
     const decoded = JWTService.verify(refreshToken);
     if (
       !decoded?.jti ||
@@ -214,8 +219,19 @@ class AuthService {
         )
       )
         throw new UnauthorizedException(errors.AUTH_SESSION_EXPIRED);
-      return this.issueSession(user, context, transaction, session);
+      return action(user, session, transaction);
     });
+  }
+  static refresh(refreshToken, context) {
+    return this.withRefreshSession(refreshToken, (user, session, transaction) => this.issueSession(user, context, transaction, session));
+  }
+  static async revokeSessions(user, transaction) {
+    await user.update({ sessionVersion: user.sessionVersion + 1, logoutAt: new Date() }, { transaction });
+    await AuthSession.update({ revokedAt: new Date() }, { where: { userId: user.userId, revokedAt: null }, transaction });
+    return { loggedOut: true };
+  }
+  static logoutByRefreshToken(refreshToken) {
+    return this.withRefreshSession(refreshToken, (user, session, transaction) => this.revokeSessions(user, transaction));
   }
   static async logout(userId) {
     return sequelize.transaction(async (transaction) => {
@@ -225,15 +241,7 @@ class AuthService {
         lock: transaction.LOCK.UPDATE,
       });
       if (!user) throw new UnauthorizedException();
-      await user.update(
-        { sessionVersion: user.sessionVersion + 1, logoutAt: new Date() },
-        { transaction },
-      );
-      await AuthSession.update(
-        { revokedAt: new Date() },
-        { where: { userId, revokedAt: null }, transaction },
-      );
-      return { loggedOut: true };
+      return this.revokeSessions(user, transaction);
     });
   }
   static async forgotPassword({ email }, context) {
@@ -244,7 +252,6 @@ class AuthService {
       try {
         ({ challengeId } = await Verification.createChallenge({
           user,
-          ipAddress: context.ipAddress,
           purpose: "password-reset",
         }));
       } catch (error) {
@@ -256,7 +263,7 @@ class AuthService {
     }
     return {
       challengeId,
-      expiresIn: config.login.otpTtlSeconds,
+      expiresIn: config.emailVerification.otpTtlSeconds,
       message:
         "Nếu tài khoản tồn tại, mã đặt lại mật khẩu sẽ được gửi qua email.",
     };
@@ -264,18 +271,17 @@ class AuthService {
   static async resetPassword(data, context) {
     const verified = await Verification.verifyChallenge({
       ...data,
-      ipAddress: context.ipAddress,
       purpose: "password-reset",
     });
     await sequelize.transaction(async (transaction) => {
       const user = await User.findOne({
-        where: { userId: verified.userId },
+        where: { userId: verified.subjectId },
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
       this.assertUser(user, verified.sessionVersion);
       await user.update(
-        { password: data.password, trustedIpRecords: [] },
+        { password: data.password, emailVerifiedAt: new Date() },
         { transaction },
       );
       await AuthSession.update(

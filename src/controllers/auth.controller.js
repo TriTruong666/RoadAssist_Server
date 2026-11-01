@@ -20,7 +20,7 @@ module.exports = {
   verifyOtp: async (req, res) =>
     Response.success(
       res,
-      await AuthService.verifyLogin(req.validated, requestContext(req)),
+      await AuthService.verifyEmail(req.validated, requestContext(req)),
     ),
   refresh: async (req, res) =>
     Response.success(
