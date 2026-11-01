@@ -1,4 +1,5 @@
 module.exports = {
+  AUTH_MAIL_UNAVAILABLE: { code: "AUTH_MAIL_UNAVAILABLE", message: "Dịch vụ email tạm thời không khả dụng", statusCode: 503 },
   "SUCCESS": {
     "code": "SUCCESS",
     "message": "Thành công",
