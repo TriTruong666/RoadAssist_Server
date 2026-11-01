@@ -18,6 +18,8 @@ module.exports = (err, req, res, next) => {
     ["ValidationError", "SequelizeValidationError"].includes(err.name)
   ) {
     descriptor = ErrorCodes.VALIDATION_ERROR;
+  } else if (err.name === 'MulterError') {
+    descriptor = err.code === 'LIMIT_FILE_SIZE' ? ErrorCodes.PAYLOAD_TOO_LARGE : ErrorCodes.VALIDATION_ERROR;
   } else if (err.type === "entity.parse.failed") {
     descriptor = ErrorCodes.BAD_REQUEST;
   } else if (err.type === "entity.too.large") {
