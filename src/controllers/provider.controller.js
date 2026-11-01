@@ -18,7 +18,7 @@ module.exports = {
   search: async (req, res) => Response.success(res, await Service.search(req.validated)),
   pending: async (req, res) => Response.success(res, await Service.pending(req.user, req.validated)),
   pendingTows: async (req, res) => Response.success(res, await Service.pending(req.user, { ...req.validated, kind: 'TOW' })),
-  approve: async (req, res) => send(res, await Service.review(req.user, req.validated.id, 'approve', {}, requestContext(req))),
+  approve: async (req, res) => send(res, await Service.review(req.user, req.validated.id, 'approve', req.validated, requestContext(req))),
   deny: async (req, res) => send(res, await Service.review(req.user, req.validated.id, 'deny', req.validated, requestContext(req))),
   suspend: async (req, res) => send(res, await Service.review(req.user, req.validated.id, 'suspend', req.validated, requestContext(req))),
 };

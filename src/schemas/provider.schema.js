@@ -44,3 +44,24 @@ module.exports = {
     body('limit').optional().isInt({ min: 1, max: 100 }).bail().toInt()],
   validHours,
 };
+
+const { CAPABILITIES, TOW_METHODS, DOCUMENT_TYPES } = require('../common/provider.constants');
+function capabilityFields() {
+  return [body('capabilities').optional().isArray({ max: 7 }).bail().custom(values => new Set(values).size === values.length).customSanitizer(values => [...values].sort()),
+    body('capabilities.*').isIn(CAPABILITIES),
+    body('supportedVehicleTypes').optional().isArray({ max: 2 }).bail().custom(values => new Set(values).size === values.length).customSanitizer(values => [...values].sort()),
+    body('supportedVehicleTypes.*').isIn(['BIKE', 'CAR']),
+    body('maxConcurrentJobs').optional().isInt({ min: 1, max: 20 }).bail().toInt(),
+    ...[['towMaxWeightKg', 1, 100000], ['towMaxWidth', 0.3, 3], ['towMaxHeight', 0.5, 3], ['towMaxLength', 0.5, 20]].map(([field, min, max]) => body(field).optional({ nullable: true }).isFloat({ min, max }).bail().customSanitizer(Number)),
+    body('towMethods').optional().isArray({ max: 2 }).bail().custom(values => new Set(values).size === values.length).customSanitizer(values => [...values].sort()),
+    body('towMethods.*').isIn(TOW_METHODS)];
+}
+module.exports.create.push(...capabilityFields());
+module.exports.update.push(...capabilityFields());
+module.exports.approve = [body('reason').isString().bail().trim().isLength({ min: 1, max: 500 })];
+module.exports.documentType = [body('documentType').isIn(DOCUMENT_TYPES)];
+module.exports.documentId = [param('documentId').isUUID(4)];
+module.exports.search.push(body('availableOnly').optional().isBoolean({ strict: true }),
+  body('requiredCapabilities').optional().isArray({ min: 1, max: 7 }), body('requiredCapabilities.*').isIn(CAPABILITIES),
+  body('vehicleType').optional().isIn(['BIKE', 'CAR']), body('towMethod').optional().isIn(TOW_METHODS),
+  ...[['vehicleWeightKg', 1, 100000], ['vehicleWidth', 0.3, 3], ['vehicleHeight', 0.5, 3], ['vehicleLength', 0.5, 20]].map(([field, min, max]) => body(field).optional().isFloat({ min, max }).bail().customSanitizer(Number)));

@@ -11,4 +11,12 @@ router.put('/:id', protect, schema.id, schema.update, validate, controller.updat
 router.post('/:id/toggle-duty', protect, schema.id, schema.duty, validate, controller.duty);
 router.post('/:id/revoke', protect, schema.id, validate, controller.revoke);
 router.get('/:id', optionalProtect, schema.id, validate, controller.get);
+const documents = require('../controllers/provider_document.controller');
+const upload = require('../middlewares/provider_upload.middleware');
+router.get('/:id/availability', optionalProtect, schema.id, validate, documents.availability);
+router.get('/:id/documents', protect, schema.id, validate, documents.list);
+router.post('/:id/documents', protect, schema.id, upload, schema.documentType, validate, documents.upload);
+router.get('/:id/documents/:documentId/content', protect, schema.id, schema.documentId, validate, documents.content);
+router.delete('/:id/documents/:documentId', protect, schema.id, schema.documentId, validate, documents.withdraw);
+router.get('/:id/audit', protect, schema.id, schema.pending, validate, documents.history);
 module.exports = router;
