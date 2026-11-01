@@ -1,6 +1,7 @@
-const { Op } = require("sequelize");
 const sequelize = require("../config/postgres.config");
 const { User, VehicleProfile, VehicleRideConfig } = require("../models");
+const Policy = require("./vehicle_policy.service");
+const ProviderAccess = require("./provider_access.service");
 const errors = require("../common/exceptions/error_codes");
 const {
   NotFoundException,
@@ -67,7 +68,12 @@ class VehicleService {
             .filter((field) => submittedRideConfig[field] !== undefined)
             .map((field) => [field, submittedRideConfig[field]]),
         );
+      const providers = await Policy.linkedProviders(vehicle, transaction);
+      await Policy.assertNotBusy(vehicle, providers, transaction);
+      const identityChanged = Policy.identityChanged(vehicle, fields);
       await vehicle.update(fields, { transaction });
+      const reapprovalRequiredProviders = identityChanged ? await Policy.requireReapproval(providers, vehicle, transaction) : [];
+      await ProviderAccess.synchronize(user, transaction);
       if (vehicle.isActive === false && user.activeVehicleId === id)
         await user.update({ activeVehicleId: null }, { transaction });
       const current = await VehicleRideConfig.findOne({
@@ -91,10 +97,8 @@ class VehicleService {
           { vehicleProfileId: id, ...values },
           { transaction },
         );
-      return VehicleProfile.findByPk(id, {
-        include: this.include,
-        transaction,
-      });
+      const updated = await VehicleProfile.findByPk(id, { include: this.include, transaction });
+      return { ...updated.toJSON(), reapprovalRequiredProviders };
     });
   }
   static async setActive(userId, id) {
@@ -121,58 +125,14 @@ class VehicleService {
     return sequelize.transaction(async (transaction) => {
       const user = await this.lockUser(userId, transaction);
       const vehicle = await this.owned(userId, id, transaction);
-      // Phase 3 registers Provider. All linked licenses must be revoked before the FK can be cleared.
-      const Provider = sequelize.models.Provider;
+      const providers = await Policy.linkedProviders(vehicle, transaction);
+      await Policy.assertNotBusy(vehicle, providers, transaction);
       const revokedProviders = [];
-      if (Provider) {
-        const providers = await Provider.findAll({
-          where: {
-            vehicleProfileId: id,
-            userId,
-            kind: { [Op.in]: ["TOW", "MOBILE_SHOP"] },
-          },
-          transaction,
-          lock: transaction.LOCK.UPDATE,
-        });
-        for (const provider of providers) {
-          await provider.update(
-            {
-              status: "DENIED",
-              accepting: false,
-              suspended: true,
-              vehicleProfileId: null,
-            },
-            { transaction },
-          );
-          revokedProviders.push({ id: provider.id, kind: provider.kind });
-        }
-        const remaining = await Provider.findAll({
-          where: { userId, status: { [Op.ne]: "DENIED" } },
-          transaction,
-        });
-        const removedKinds = revokedProviders
-          .map((provider) => provider.kind)
-          .filter(
-            (kind) => !remaining.some((provider) => provider.kind === kind),
-          );
-        if (removedKinds.length) {
-          const services = user.services.filter(
-            (service) => !removedKinds.includes(service),
-          );
-          await user.update(
-            {
-              services,
-              ...(user.role === "provider" &&
-              !services.some((service) =>
-                ["SHOP", "MOBILE_SHOP", "TOW"].includes(service),
-              )
-                ? { role: "guest" }
-                : {}),
-            },
-            { transaction },
-          );
-        }
+      for (const provider of providers) {
+        await provider.update({ status: 'DENIED', accepting: false, suspended: true, vehicleProfileId: null }, { transaction });
+        revokedProviders.push({ id: provider.id, kind: provider.kind });
       }
+      await ProviderAccess.synchronize(user, transaction);
       if (user.activeVehicleId === id)
         await user.update({ activeVehicleId: null }, { transaction });
       await vehicle.destroy({ transaction });
