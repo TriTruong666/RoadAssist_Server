@@ -34,4 +34,11 @@ const requireServices =
       return next(new ForbiddenException(errors.FORBIDDEN));
     next();
   };
-module.exports = { protect, restrictTo, requireServices };
+async function optionalProtect(req, res, next) {
+  try {
+    const token = req.cookies?.[ACCESS_COOKIE];
+    if (token) req.user = await JWTService.verifyUserSession(token);
+    next();
+  } catch (error) { next(error); }
+}
+module.exports = { optionalProtect, protect, restrictTo, requireServices };

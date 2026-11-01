@@ -25,7 +25,7 @@ module.exports = (req, res, next) => {
     );
   }
   req.validated = matchedData(req, {
-    locations: ["body", "params"],
+    locations: ["body", "params", "query"],
     onlyValidData: true,
   });
   next();

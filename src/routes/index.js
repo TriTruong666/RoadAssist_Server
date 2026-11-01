@@ -4,5 +4,7 @@ const v1 = Router();
 v1.use('/auth', require('./auth.routes'));
 v1.use('/users', require('./user.routes'));
 v1.use('/vehicles', require('./vehicle.routes'));
+v1.use('/providers', require('./provider.routes'));
+v1.use('/admin/providers', require('./admin_provider.routes'));
 router.use("/v1", v1);
 module.exports = router;

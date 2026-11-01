@@ -1,4 +1,10 @@
 module.exports = {
+  PROVIDER_LOCATION_CONFIRMATION_REQUIRED: { code: 'PROVIDER_LOCATION_CONFIRMATION_REQUIRED', message: 'Có tiệm trong bán kính 300m, vui lòng xác nhận trước khi đăng ký', statusCode: 409 },
+  PROVIDER_VEHICLE_INVALID: { code: 'PROVIDER_VEHICLE_INVALID', message: 'Phương tiện hoặc biển số đối tác không hợp lệ', statusCode: 400 },
+  PROVIDER_LOCATION_STALE: { code: 'PROVIDER_LOCATION_STALE', message: 'Tọa độ đã cũ hoặc không hợp lệ', statusCode: 409 },
+  PROVIDER_INVALID_TRANSITION: { code: 'PROVIDER_INVALID_TRANSITION', message: 'Không thể chuyển trạng thái hồ sơ này', statusCode: 409 },
+  PROVIDER_BUSY: { code: 'PROVIDER_BUSY', message: 'Đối tác đang xử lý cuốc cứu hộ', statusCode: 409 },
+
   AUTH_EMAIL_NOT_VERIFIED: { code: "AUTH_EMAIL_NOT_VERIFIED", message: "Vui lòng xác minh email trước khi đăng nhập", statusCode: 403 },
 
   AUTH_MAIL_UNAVAILABLE: { code: "AUTH_MAIL_UNAVAILABLE", message: "Dịch vụ email tạm thời không khả dụng", statusCode: 503 },

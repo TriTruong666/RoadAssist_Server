@@ -1,0 +1,14 @@
+const router = require('express').Router();
+const controller = require('../controllers/provider.controller');
+const schema = require('../schemas/provider.schema');
+const validate = require('../middlewares/validate.middleware');
+const { protect, optionalProtect } = require('../middlewares/auth.middleware');
+router.post('/search', schema.search, validate, controller.search);
+router.post('/', protect, schema.create, validate, controller.register);
+router.get('/me', protect, controller.me);
+router.post('/location', protect, schema.location, validate, controller.location);
+router.put('/:id', protect, schema.id, schema.update, validate, controller.update);
+router.post('/:id/toggle-duty', protect, schema.id, schema.duty, validate, controller.duty);
+router.post('/:id/revoke', protect, schema.id, validate, controller.revoke);
+router.get('/:id', optionalProtect, schema.id, validate, controller.get);
+module.exports = router;
