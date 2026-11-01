@@ -17,6 +17,7 @@ module.exports = (err, req, res, next) => {
   } else if (err.type === "entity.too.large") {
     descriptor = ErrorCodes.PAYLOAD_TOO_LARGE;
   }
+  if (descriptor.statusCode === 429 && details?.retryAfter) res.set("Retry-After", String(details.retryAfter));
   if (descriptor.statusCode >= 500) {
     console.error(`[ERROR] ${req.method} ${req.url}`, err);
     return ResponseHandler.internalError(res, descriptor.message, err, descriptor.code, details, descriptor.statusCode);
