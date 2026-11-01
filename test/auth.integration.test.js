@@ -340,7 +340,7 @@ if (!enabled) {
     const result = await require('../src/services/vehicle.service').remove(provider.user.userId, vehicle.id);
     assert.equal(result.revokedProviders[0].id, linked.id);
     await linked.reload();
-    assert.equal(linked.status, 'DENIED');
+    assert.equal(linked.status, 'REVOKED');
     assert.equal(linked.accepting, false);
     assert.equal(linked.vehicleProfileId, null);
     const user = await User.findOne({ where: { userId: provider.user.userId } });
