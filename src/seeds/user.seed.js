@@ -35,6 +35,7 @@ async function seedSystemAdmin() {
     ) {
       throw new Error("Admin seed identity conflicts with an existing account");
     }
+    if (!existing.emailVerifiedAt && await existing.comparePassword(password)) await existing.update({ emailVerifiedAt: new Date() });
     return existing;
   }
   return User.create({
@@ -44,6 +45,7 @@ async function seedSystemAdmin() {
     name: process.env.ADMIN_SEED_NAME || "RoadAssist Admin",
     role: "admin",
     services: ["RIDER"],
+    emailVerifiedAt: new Date(),
     onboarded: true,
   });
 }
@@ -83,8 +85,11 @@ async function seedUsers() {
               email,
               password: item.password,
               phone,
-              role: item.role || "guest",
-              services: item.services || ["RIDER"],
+              role: item.role === "admin" ? "admin" : "guest",
+              // Seed selections are not operational provider grants.
+              services: ["RIDER"],
+              requestedServices: item.requestedServices || item.services || ["RIDER"],
+              emailVerifiedAt: item.emailVerified === true ? new Date() : null,
               status: item.status || "ACTIVE",
               onboarded: item.onboarded !== undefined ? item.onboarded : true,
             });

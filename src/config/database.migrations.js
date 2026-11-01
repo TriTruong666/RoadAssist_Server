@@ -1,6 +1,16 @@
-// RoadAssist-only migrations. Legacy WMS migrations must never run here.
-const migrations = [];
+const { Op } = require('sequelize');
 async function runStartupDatabaseMigrations(sequelize) {
-  for (const migration of migrations) await migration.up(sequelize);
+  const User = sequelize.models.User;
+  if (!User) return;
+  const ProviderAccess = require('../services/provider_access.service');
+  const users = await User.findAll({ where: { services: { [Op.ne]: ['RIDER'] } } });
+  for (const candidate of users) {
+    await sequelize.transaction(async transaction => {
+      const user = await User.findByPk(candidate.id, { transaction, lock: transaction.LOCK.UPDATE });
+      const requestedServices = [...new Set(['RIDER', ...user.requestedServices, ...user.services])];
+      await user.update({ requestedServices }, { transaction });
+      await ProviderAccess.synchronize(user, transaction);
+    });
+  }
 }
 module.exports = { runStartupDatabaseMigrations };

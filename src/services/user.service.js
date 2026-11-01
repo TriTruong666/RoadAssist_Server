@@ -14,7 +14,8 @@ class UserService {
           include: [{ model: VehicleRideConfig, as: "rideConfig" }],
         })
       : null;
-    return { ...user.toJSON(), activeVehicle };
+    const permissions = await require("./provider_access.service").permissions(user);
+    return { ...user.toJSON(), ...permissions, activeVehicle };
   }
   static async update(userId, data) {
     await sequelize.transaction(async (transaction) => {
@@ -26,16 +27,8 @@ class UserService {
   static async onboard(userId, data, context) {
     return sequelize.transaction(async (transaction) => {
       const user = await VehicleService.lockUser(userId, transaction);
-      const services = [
-        ...new Set(["RIDER", ...user.services, ...(data.services || [])]),
-      ];
-      const role =
-        user.role === "admin"
-          ? "admin"
-          : services.some((service) => service !== "RIDER")
-            ? "provider"
-            : "guest";
-      await user.update({ onboarded: true, services, role }, { transaction });
+      const requestedServices = [...new Set(['RIDER', ...(data.requestedServices || data.services || user.requestedServices)])];
+      await user.update({ onboarded: true, requestedServices }, { transaction });
       return AuthService.issueSession(user, context, transaction);
     });
   }
