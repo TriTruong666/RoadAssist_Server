@@ -1,4 +1,6 @@
 module.exports = {
+  AUTH_EMAIL_NOT_VERIFIED: { code: "AUTH_EMAIL_NOT_VERIFIED", message: "Vui lòng xác minh email trước khi đăng nhập", statusCode: 403 },
+
   AUTH_MAIL_UNAVAILABLE: { code: "AUTH_MAIL_UNAVAILABLE", message: "Dịch vụ email tạm thời không khả dụng", statusCode: 503 },
   "SUCCESS": {
     "code": "SUCCESS",

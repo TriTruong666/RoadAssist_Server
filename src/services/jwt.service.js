@@ -51,6 +51,7 @@ class JWTService {
     if (
       !user ||
       user.status !== "ACTIVE" ||
+      !user.emailVerifiedAt ||
       decoded.sessionVersion !== user.sessionVersion
     )
       return null;
@@ -66,11 +67,12 @@ class JWTService {
       )
         return null;
     }
+    const permissions = await require("./provider_access.service").permissions(user);
     return {
       userId: user.userId,
       name: user.name,
-      role: user.role,
-      services: user.services,
+      role: permissions.role,
+      services: permissions.services,
       sessionVersion: user.sessionVersion,
     };
   }
