@@ -88,6 +88,7 @@ async function startServer() {
   }
 }
 async function stopServer() {
+  await require("./src/jobs/cron").stopCronJobs();
   const closing = server.listening
     ? new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

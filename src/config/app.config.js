@@ -99,5 +99,6 @@ module.exports = {
     pingTimeout: integer("SOCKET_PING_TIMEOUT", 60000),
     pingInterval: integer("SOCKET_PING_INTERVAL", 25000),
   },
+  providers: { redisPrefix: process.env.PROVIDER_REDIS_PREFIX || '', locationTtlSeconds: 900 },
   swagger: { public: boolean("SWAGGER_PUBLIC") },
 };

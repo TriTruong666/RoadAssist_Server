@@ -1,3 +1,11 @@
-// Register RoadAssist TTL and expiry schedules in subsequent phases.
-async function initCronJobs() {}
-module.exports = { initCronJobs };
+const cron = require('node-cron');
+const LocationService = require('../services/location.service');
+let locationTask;
+async function initCronJobs() {
+  await LocationService.reconcile();
+  if (!locationTask) locationTask = cron.schedule('* * * * *', () => LocationService.reconcile(), { noOverlap: true });
+}
+async function stopCronJobs() {
+  if (locationTask) { await locationTask.destroy(); locationTask = null; }
+}
+module.exports = { initCronJobs, stopCronJobs };
