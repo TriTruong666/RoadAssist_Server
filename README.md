@@ -17,7 +17,7 @@ Existing `.env.development` files can be kept. Defaults are HTTP `9898`, Postgre
 
 - `GET /health`: HTTP 200 when PostgreSQL and Redis are reachable; HTTP 503 otherwise.
 - `/api/v1/auth`, `/api/v1/users`, `/api/v1/vehicles`: Phase 2 feature routers; see Swagger for all 19 operations.
-- `/api/v1/providers`, `/api/v1/admin/providers`: Phase 3 provider registration, review, duty and discovery (13 operations).
+- `/api/v1/providers`, `/api/v1/admin/providers`: Phase 3 provider registration, review, duty and discovery (19 operations, including availability/evidence/audit).
 - `/api-docs`: Swagger, localhost only unless `SWAGGER_PUBLIC=true`.
 - `npm test`: HTTP validation, authentication guards, response/error, CORS, body limits and readiness tests without external services.
 - `npm run test:integration`: actual PostgreSQL/Redis integration tests. Each integration file creates and removes its own PostgreSQL schema and Redis namespaces; SMTP is stubbed. Run `RUN_DB_TESTS=1 npm test` for the complete suite.
@@ -26,7 +26,7 @@ JSON and URL-encoded request bodies support up to 10 MB. Error descriptors conta
 
 ## Database and services
 
-Startup synchronizes registered RoadAssist models with `alter: true` and runs RoadAssist-only migrations. Registered models are User, AuthSession, PendingRegistration, VehicleProfile, VehicleRideConfig, Provider and ProviderLocationHistory. Legacy database tables are not removed by cleanup of source files.
+Startup synchronizes registered RoadAssist models with `alter: true` and runs RoadAssist-only migrations. Registered models are User, AuthSession, PendingRegistration, VehicleProfile, VehicleRideConfig, Provider, ProviderLocationHistory, ProviderDocument and ProviderAuditLog. Legacy database tables are not removed by cleanup of source files.
 
 `DB_FORCE_RESET=true` explicitly recreates registered model tables and clears the selected Redis database. Keep it false for normal startup. Legacy partial reset (`DB_RESET=true`) is rejected; enabling both reset flags is rejected as well. Shutdown closes HTTP, Redis and PostgreSQL connections.
 
@@ -118,7 +118,7 @@ Seed JSON accounts use requestedServices as service interests; legacy services v
 
 Plate normalization removes spaces/dots/hyphens and uppercases the result. Validation uses `^\d{2}[A-Z0-9]{1,3}\d{4,6}$` as specified by the roadmap. The provider's plate must match its linked vehicle.
 
-There is at most one non-DENIED profile per owner/kind, enforced by both row locking and a partial unique PostgreSQL index. Denied/revoked profiles are retained as history. Duplicate SHOP/MOBILE_SHOP locations within 300m return 409 PROVIDER_LOCATION_CONFIRMATION_REQUIRED and details.nearby; retry with confirmNearby=true after the user acknowledges the warning. Off-duty/stale mobile GPS is excluded from these warnings as well as public discovery.
+There is at most one live profile per owner/kind (both DENIED and REVOKED are archived), enforced by both row locking and a partial unique PostgreSQL index. DENIED means the admin rejected an application; REVOKED means the license was withdrawn. Both are retained as history. Duplicate SHOP/MOBILE_SHOP locations within 300m return 409 PROVIDER_LOCATION_CONFIRMATION_REQUIRED and details.nearby; retry with confirmNearby=true after the user acknowledges the warning. Off-duty/stale mobile GPS is excluded from these warnings as well as public discovery.
 
 `GET /providers/me` returns owned profiles/history. `GET /providers/:id` returns private review/license information only to the owner/admin; other callers receive a public projection of an approved, non-suspended profile belonging to an active verified account. Private licenses, review reasons, owner IDs and internal cache counters never enter public search/detail responses.
 
@@ -128,7 +128,7 @@ Admin cookie endpoints:
 
 - `GET /admin/providers/pending-tows`: paginated TOW applications.
 - `GET /admin/providers/pending`: all pending kinds, optionally ?kind=MOBILE_SHOP, including vehicle/license reapproval.
-- `PUT /admin/providers/:id/approve`: revalidate the vehicle, plate and license, then activate and synchronize operational permissions.
+- `PUT /admin/providers/:id/approve`: requires reason and current private evidence; revalidates vehicle, plate, license and capabilities, then records the reviewed revision, activates and synchronizes permissions.
 - `PUT /admin/providers/:id/deny`: requires reason; denial is only valid for pending profiles.
 - `PUT /admin/providers/:id/suspend`: suspended=true plus reason disables duty/grants; suspended=false removes the restriction but never turns duty on or automatically approves a profile.
 
@@ -149,3 +149,16 @@ A non-overlapping cron task prunes stale members and reconciles fresh positions 
 `POST /providers/search` accepts latitude/longitude plus optional radiusKm (maximum 50), kinds, minRating, acceptingOnly, sortBy (distance/rating), and limit (maximum 100). It returns public providers with distanceMeters and effective available state. Mobile results always require accepting=true and a heartbeat within 15 minutes, even when acceptingOnly=false. Off-duty/stale mobile details hide coordinates; fixed SHOP locations remain public.
 
 Active rescue dispatches block vehicle/profile identity changes and license revocation in the same transaction. Turning duty off stops new discovery without revoking the license or interrupting existing trip history. Phase 5 assignment must recheck provider approval/suspension, accepting, vehicle validity and mobile GPS freshness under the shared owner → vehicle → provider locking protocol; search results alone are not authorization.
+
+## Upgraded provider business rules
+
+The complete provider contract is documented in [docs/PROVIDER_BUSINESS_RULES.md](docs/PROVIDER_BUSINESS_RULES.md). It supersedes older Phase 3 examples where a license number alone was enough for manual approval.
+
+- Duty consent (`onDuty`) is separate from effective availability and capacity. SHOP declares 1–20 bays; MOBILE_SHOP/TOW share one slot when linked to the same vehicle. Availability is derived from nonterminal PostgreSQL dispatch tickets, with transactional assignment locks prepared for Phase 5. No client can set busy/free counts directly.
+- Declare capabilities and supportedVehicleTypes before enabling duty. TOW also needs load weight/dimensions and towMethods. Discovery and the assignment guard both match these declarations. First SHOP/MOBILE_SHOP registrations still auto-approve; the public label is AUTO_APPROVED, not manually verified.
+- Manual approval requires private image evidence and a reason. Evidence is stored as PostgreSQL bytea, never publicly served. Uploaded images are tied to the current vehicle/license/business identity. Changing that identity invalidates old evidence for future reviews while retaining past snapshots.
+- Review/profile changes record append-only before/after snapshots, actor and reason. GPS telemetry does not flood the review history. Evidence withdrawal is soft; private historical content remains available to the owner/admin.
+- REVOKED is separate from DENIED. A safe startup migration updates the enum/index and converts legacy self-revoked rows without relabeling rejected applications. Old manual approvals lacking a reviewed revision return to PENDING.
+- Mobile discovery requires a GOOD trusted GPS fix. Missing accuracy, accuracy over the configured threshold (default 100m), or an implausible jump makes the fix unusable for dispatch; the previous trusted point is preserved and the provider is removed from discovery. This does not ban the account. Existing trip GPS remains private when duty is off or a provider is suspended.
+
+`PROVIDER_GPS_MAX_ACCURACY_METERS` may be set from 1 to 1000. Images are JPEG/PNG/WebP, maximum 5MB each; limits include withdrawn history (10 active/50 total/100MB per profile; 200 total/200MB per owner). Retrying identical current evidence is idempotent.

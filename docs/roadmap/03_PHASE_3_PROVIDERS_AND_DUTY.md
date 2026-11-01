@@ -238,3 +238,16 @@ Nhịp tim GPS của các đối tác đang bật trực ca được lưu trữ 
 - Xác minh: `RUN_DB_TESTS=1 npm test` **70/70 pass**, không skip; bao gồm regression Auth/cookie/xe và PostgreSQL/Redis thật cho Provider/Duty. Fixture DispatchTicket nằm trong schema test riêng, không tạo model ticket production trước Phase 5.
 - `npm run dev` khởi động trên cổng 9898; `/health` trả HTTP 200 với PostgreSQL/Redis Connected, `/api-docs/` HTTP 200, POST `/api/v1/providers/search` hoạt động trên schema local thật.
 - Docker image `roadassist-server:phase3` build thành công; import runtime Node 20 và Swagger (33 operations kể cả health) thành công.
+
+
+## 7. Nâng cấp nghiệp vụ Provider
+
+- Đang trực và đang rảnh là hai trạng thái khác nhau. SHOP có số chỗ 1–20; MOBILE_SHOP/TOW cùng xe chia sẻ một chỗ. activeJobs/freeSlots lấy từ ticket PostgreSQL, không nhận giá trị do client tự gán.
+- Khai báo capabilities, supportedVehicleTypes; TOW bổ sung tải trọng, kích thước và phương thức kéo. Search và guard gán cuốc dùng cùng điều kiện.
+- Thêm ảnh bằng chứng riêng tư và audit log chỉ ghi thêm. Duyệt thủ công yêu cầu lý do, ảnh theo loại hồ sơ và fingerprint khớp thông tin hiện tại; lưu snapshot trước/sau, actor và document hash.
+- Thêm REVOKED, tách khỏi DENIED; migration enum/index và dữ liệu self-revoke cũ an toàn, giữ nguyên đơn bị từ chối. Hồ sơ thu hồi tạo đơn mới thay vì sửa lại lịch sử.
+- Phân loại GPS GOOD/UNKNOWN/POOR_ACCURACY/IMPLAUSIBLE_JUMP; chỉ điểm GOOD mới dùng điều phối. Giữ điểm tin cậy, không tự khóa tài khoản. GPS của cuốc đang chạy khi tắt ca hoặc bị đình chỉ vẫn lưu riêng tư, không public.
+- Thêm GET availability, upload/list/download/withdraw documents và GET audit. Cookie Auth giữ nguyên; không trả access/refresh token trong JSON.
+- Chi tiết hợp đồng và payload tại docs/PROVIDER_BUSINESS_RULES.md; phần DispatchTicket thật và thao tác đổi trạng thái cuốc vẫn thuộc Phase 5. Guard được kiểm thử với ticket fixture thật trong schema PostgreSQL riêng.
+- Kiểm chứng nâng cấp: `RUN_DB_TESTS=1 npm test` **90/90 pass**, không skip; PostgreSQL/Redis thật, đồng thời nhận cuốc và giới hạn chung xe, năng lực/tải trọng, quyền truy cập ảnh, audit rollback, evidence fingerprint/idempotency, GPS quality, private trip GPS và migration enum/index.
+- Docker image `roadassist-server:provider-business-upgrade` build thành công, import Node 20 thành công; Swagger có 39 operations kể cả health. Server local khởi động trên schema nâng cấp, `/health` HTTP 200 với PostgreSQL/Redis Connected.
