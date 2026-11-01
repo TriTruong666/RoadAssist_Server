@@ -1,4 +1,6 @@
 const User = require('./user.model');
+const Provider = require('./provider.model');
+const ProviderLocationHistory = require('./provider_location_history.model');
 const PendingRegistration = require('./pending_registration.model');
 const AuthSession = require('./auth_session.model');
 const VehicleProfile = require('./vehicle_profile.model');
@@ -11,4 +13,10 @@ VehicleProfile.hasOne(VehicleRideConfig, { as: 'rideConfig', foreignKey: 'vehicl
 VehicleRideConfig.belongsTo(VehicleProfile, { foreignKey: 'vehicleProfileId' });
 User.hasMany(AuthSession, { foreignKey: 'userId', sourceKey: 'userId', onDelete: 'CASCADE' });
 AuthSession.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
-module.exports = { PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
+User.hasMany(Provider, { as: 'providers', foreignKey: 'userId', sourceKey: 'userId', onDelete: 'CASCADE' });
+Provider.belongsTo(User, { as: 'owner', foreignKey: 'userId', targetKey: 'userId' });
+VehicleProfile.hasMany(Provider, { as: 'providerLinks', foreignKey: 'vehicleProfileId', onDelete: 'SET NULL' });
+Provider.belongsTo(VehicleProfile, { as: 'vehicle', foreignKey: 'vehicleProfileId' });
+Provider.hasMany(ProviderLocationHistory, { as: 'locations', foreignKey: 'providerId', onDelete: 'CASCADE' });
+ProviderLocationHistory.belongsTo(Provider, { foreignKey: 'providerId' });
+module.exports = { Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
