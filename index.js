@@ -18,6 +18,7 @@ app.use(require("cors")({ origin: config.cors, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(require("cookie-parser")());
+app.use(require("./src/middlewares/cookie_origin.middleware"));
 app.get("/health", async (req, res) => {
   const [database, cache] = await Promise.allSettled([
     sequelize.authenticate(),
@@ -43,7 +44,7 @@ app.use(
   "/api-docs",
   require("./src/middlewares/localhostOnly.middleware"),
   swaggerUi.serve,
-  swaggerUi.setup(require("./src/config/swagger.config")),
+  swaggerUi.setup(require("./src/config/swagger.config"), { swaggerOptions: { withCredentials: true } }),
 );
 app.use((req, res, next) => next(new NotFoundException()));
 app.use(require("./src/middlewares/error.handler"));
@@ -56,6 +57,7 @@ async function startServer() {
         "DB_RESET is unsupported; use DB_FORCE_RESET for an explicit full reset",
       );
     require("./src/services/jwt.service").assertConfigured();
+    require("./src/utils/auth_cookie.util").assertCookieConfig();
     await sequelize.authenticate();
     await redis.connect();
     await redis.ping();
