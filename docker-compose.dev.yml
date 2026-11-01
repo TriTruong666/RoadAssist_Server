@@ -1,0 +1,27 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: roadassist-postgres-dev
+    environment:
+      POSTGRES_DB: roadassist_db_dev
+      POSTGRES_USER: roadassist_dev
+      POSTGRES_PASSWORD: M@tkhau123
+    ports:
+      - "5436:5432"
+    volumes:
+      - roadassist_postgres_dev_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    container_name: roadassist-redis-dev
+    command: redis-server --requirepass M@tkhau123
+    ports:
+      - "6384:6379"
+    volumes:
+      - roadassist_redis_dev_data:/data
+    restart: unless-stopped
+
+volumes:
+  roadassist_postgres_dev_data:
+  roadassist_redis_dev_data:
