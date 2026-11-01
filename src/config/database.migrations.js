@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 async function runStartupDatabaseMigrations(sequelize) {
+  await require("./provider.migrations").reconcileProviderData(sequelize);
   const User = sequelize.models.User;
   if (!User) return;
   const ProviderAccess = require('../services/provider_access.service');

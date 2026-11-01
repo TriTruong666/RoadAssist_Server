@@ -57,7 +57,7 @@ class VehiclePolicyService {
       return value !== vehicle[field];
     });
   }
-  static async requireReapproval(providers, vehicle, transaction) {
+  static async requireReapproval(providers, vehicle, transaction, priorVehicle) {
     const affected = [];
     for (const provider of providers) {
       if (provider.status !== "ACTIVE") continue;
@@ -65,10 +65,11 @@ class VehiclePolicyService {
         {
           status: "PENDING",
           requiresApproval: true,
+          profileRevision: Number(provider.profileRevision || 0) + 1,
           accepting: false,
           plateNumber: vehicle.plateNumber,
         },
-        { transaction },
+        { transaction, auditActorId: vehicle.userId, auditAction: "VEHICLE_CHANGED", auditBeforeVehicle: priorVehicle },
       );
       affected.push({ id: provider.id, kind: provider.kind });
     }

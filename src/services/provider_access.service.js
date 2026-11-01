@@ -9,6 +9,7 @@ class ProviderAccessService {
       const profiles = await Provider.findAll({ where: { userId: user.userId, status: 'ACTIVE', suspended: false }, transaction });
       for (const profile of profiles) {
         if (!PROVIDER_KINDS.includes(profile.kind)) continue;
+        if (profile.requiresApproval && profile.reviewedRevision !== profile.profileRevision) continue;
         if (profile.kind !== 'SHOP') {
           const vehicle = await sequelize.models.VehicleProfile.findOne({ where: { id: profile.vehicleProfileId, userId: user.userId, isActive: true }, transaction });
           if (!vehicle || (profile.kind === 'TOW' && vehicle.type !== 'CAR')) continue;

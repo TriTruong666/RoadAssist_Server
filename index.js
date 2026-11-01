@@ -61,6 +61,7 @@ async function startServer() {
     await sequelize.authenticate();
     await redis.connect();
     await redis.ping();
+    await require("./src/config/provider.migrations").prepareProviderSchema(sequelize);
     await sequelize.sync(
       config.db.force_reset ? { force: true } : { alter: true },
     );

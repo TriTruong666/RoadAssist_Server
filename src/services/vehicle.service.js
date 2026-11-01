@@ -70,9 +70,12 @@ class VehicleService {
         );
       const providers = await Policy.linkedProviders(vehicle, transaction);
       await Policy.assertNotBusy(vehicle, providers, transaction);
+      const priorVehicle = vehicle.toJSON();
       const identityChanged = Policy.identityChanged(vehicle, fields);
       await vehicle.update(fields, { transaction });
-      const reapprovalRequiredProviders = identityChanged ? await Policy.requireReapproval(providers, vehicle, transaction) : [];
+      const reapprovalRequiredProviders = identityChanged
+        ? await Policy.requireReapproval(providers, vehicle, transaction, priorVehicle)
+        : [];
       await ProviderAccess.synchronize(user, transaction);
       if (vehicle.isActive === false && user.activeVehicleId === id)
         await user.update({ activeVehicleId: null }, { transaction });
@@ -97,7 +100,10 @@ class VehicleService {
           { vehicleProfileId: id, ...values },
           { transaction },
         );
-      const updated = await VehicleProfile.findByPk(id, { include: this.include, transaction });
+      const updated = await VehicleProfile.findByPk(id, {
+        include: this.include,
+        transaction,
+      });
       return { ...updated.toJSON(), reapprovalRequiredProviders };
     });
   }
@@ -128,8 +134,19 @@ class VehicleService {
       const providers = await Policy.linkedProviders(vehicle, transaction);
       await Policy.assertNotBusy(vehicle, providers, transaction);
       const revokedProviders = [];
+      transaction.roadAssistActorId = userId;
       for (const provider of providers) {
-        await provider.update({ status: 'DENIED', accepting: false, suspended: true, vehicleProfileId: null }, { transaction });
+        await provider.update(
+          {
+            status: "REVOKED",
+            accepting: false,
+            suspended: true,
+            vehicleProfileId: null,
+            revokedAt: provider.revokedAt || new Date(),
+            revocationReason: provider.revocationReason || "VEHICLE_DELETED",
+          },
+          { transaction },
+        );
         revokedProviders.push({ id: provider.id, kind: provider.kind });
       }
       await ProviderAccess.synchronize(user, transaction);
