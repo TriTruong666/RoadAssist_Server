@@ -22,7 +22,6 @@ test('invalid auth requests are rejected before database access without echoing 
     ['/auth/login', { email: 'invalid', password: 'sensitive' }],
     ['/auth/register-provider', { email: 'valid@example.com', name: 'Test', phone: '0901234567', password: 'sensitive', providerKind: 'admin' }],
     ['/auth/verify-otp', { challengeId: 'invalid', code: '123456' }],
-    ['/auth/refresh-token', { refreshToken: 'sensitive' }],
     ['/auth/reset-password', { challengeId: 'invalid', code: '123456', password: 'sensitive' }],
   ]) {
     const response = await fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -32,8 +31,8 @@ test('invalid auth requests are rejected before database access without echoing 
     assert.equal(JSON.stringify(result).includes('sensitive'), false);
   }
 });
-test('protected user/vehicle endpoints and logout require a valid token', async () => {
-  for (const [method, route] of [['GET', '/users/me'], ['PUT', '/users/onboard'], ['GET', '/vehicles'], ['POST', '/vehicles'], ['POST', '/auth/logout']]) {
+test('protected user/vehicle endpoints require cookie authentication', async () => {
+  for (const [method, route] of [['GET', '/users/me'], ['PUT', '/users/onboard'], ['GET', '/vehicles'], ['POST', '/vehicles']]) {
     const response = await fetch(base + route, { method });
     assert.equal(response.status, 401);
     assert.equal((await response.json()).error_code, 'UNAUTHORIZED');
@@ -50,10 +49,19 @@ test('startup refuses missing or short JWT secrets', () => {
     assert.throws(() => JWT.assertConfigured(), /32 bytes/);
   } finally { config.jwt.secret = old; }
 });
-test('Swagger describes all sixteen Auth/User/Vehicle operations', () => {
+test('Swagger describes all nineteen Auth/User/Vehicle operations', () => {
   const { paths } = require('../src/config/swagger.paths');
   const count = Object.values(paths).reduce((total, value) => total + Object.keys(value).length, 0);
-  assert.equal(count, 16);
+  assert.equal(count, 19);
   assert.deepEqual(paths['/api/v1/auth/login'].post.security, []);
-  assert.deepEqual(paths['/api/v1/users/me'].get.security, [{ bearerAuth: [] }]);
+  assert.deepEqual(paths['/api/v1/users/me'].get.security, [{ cookieAuth: [] }]);
+});
+
+test('logout is idempotent and expires both cookies without a valid session', async () => {
+  const response = await fetch(base + '/auth/logout', { method: 'POST' });
+  assert.equal(response.status, 200);
+  const cookies = response.headers.getSetCookie();
+  assert.equal(cookies.length, 2);
+  assert.ok(cookies.some(value => value.startsWith('road_as_token=;')));
+  assert.ok(cookies.some(value => value.startsWith('road_as_refresh_token=;')));
 });
