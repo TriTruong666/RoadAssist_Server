@@ -5,7 +5,8 @@ module.exports = require("../config/postgres.config").define(
     id: { type: D.UUID, primaryKey: true, defaultValue: D.UUIDV4 },
     billId: { type: D.UUID, allowNull: false, field: "bill_id" },
     paymentId: { type: D.UUID, field: "payment_id" },
-    intentId: { type: D.UUID, allowNull: false, field: "intent_id" },
+    intentId: { type: D.UUID, field: "intent_id" },
+    disputeId: { type: D.UUID, unique: true, field: "dispute_id" },
     amount: { type: D.DECIMAL(12, 2), allowNull: false },
     status: {
       type: D.ENUM("PENDING", "COMPLETED", "CANCELLED"),

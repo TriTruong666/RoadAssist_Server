@@ -51,6 +51,8 @@ const BillItem = db.define(
     },
     title: { type: D.STRING(150), allowNull: false },
     amount: money("amount"),
+    disputeCredit: money("dispute_credit"),
+    cashCommittedAt: { type: D.DATE, field: "cash_committed_at" },
     ticketRevision: {
       type: D.INTEGER,
       allowNull: false,

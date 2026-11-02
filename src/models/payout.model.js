@@ -41,6 +41,7 @@ const PayoutEntry = db.define(
     onlineCommission: money("online_commission"),
     cashCommission: money("cash_commission"),
     debtOffset: money("debt_offset"),
+    recoveryOffset: money("recovery_offset"),
     netAmount: money("net_amount"),
     externalReference: { type: D.STRING(150), field: "external_reference" },
   },
