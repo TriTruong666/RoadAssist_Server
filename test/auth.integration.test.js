@@ -14,6 +14,7 @@ if (!enabled) {
   process.env.DB_SCHEMA = `phase2_test_${suffix}`;
   process.env.AUTH_REDIS_PREFIX = `test:${suffix}:auth:`;
   process.env.PROVIDER_REDIS_PREFIX = `test:${suffix}:providers:`;
+ const s3Fixture = require('./s3.fixture');
   const { app } = require('../index');
   const sequelize = require('../src/config/postgres.config');
   const redis = require('../src/config/redis.config');

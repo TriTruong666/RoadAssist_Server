@@ -7,6 +7,7 @@ if (process.env.RUN_DB_TESTS !== '1') {
   const suffix = randomUUID().replaceAll('-', '');
   Object.assign(process.env, { NODE_ENV: 'test', DB_SCHEMA: `phase3_test_${suffix}`, PROVIDER_REDIS_PREFIX: `test:${suffix}:providers:`,
     AUTH_REDIS_PREFIX: `test:${suffix}:auth:`, JWT_SECRET: randomUUID() + randomUUID(), ALLOWED_CLIENT_URL_1: 'http://localhost:5173' });
+ const s3Fixture = require('./s3.fixture');
   const { app } = require('../index');
   const sequelize = require('../src/config/postgres.config');
   const redis = require('../src/config/redis.config');
@@ -390,7 +391,7 @@ if (process.env.RUN_DB_TESTS !== '1') {
     const repairs = await ok(null, 'POST', '/providers/search', { ...upgradePoint, radiusKm: 0.2, kinds: ['SHOP'], requiredCapabilities: ['BATTERY_JUMPSTART', 'TYRE_REPAIR'], vehicleType: 'BIKE' });
     assert.equal(repairs[0].id, capacityShop.id);
   });
-  test('manual approval requires current evidence; raw bytes and document identities stay private', async () => {
+  test('manual approval requires current evidence; metadata stays authorized and files have public S3 URLs', async () => {
     evidenceOwner = await client(7); const car = await vehicle(evidenceOwner, 'CAR', '51D67890');
     evidenceTow = (await ok(evidenceOwner, 'POST', '/providers', business('TOW', { ...upgradePoint, vehicleProfileId: car.id }), 201)).provider;
     const blocked = await request(admin, 'PUT', `/admin/providers/${evidenceTow.id}/approve`, { reason: 'Kiểm tra hồ sơ' });
@@ -399,10 +400,10 @@ if (process.env.RUN_DB_TESTS !== '1') {
     assert.equal((await request(capacityOwner, 'GET', `/providers/${evidenceTow.id}/documents`)).status, 404);
     const license = await uploadProof(evidenceOwner, evidenceTow.id, 'LICENSE_PHOTO');
     assert.equal(license.content, undefined); assert.equal(license.sha256.length, 64);
-    const response = await fetch(base + '/api/v1/providers/' + evidenceTow.id + '/documents/' + license.id + '/content', { headers: { Cookie: `road_as_token=${evidenceOwner.token}` } });
-    assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
-    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
-    assert.deepEqual(Buffer.from(await response.arrayBuffer()).subarray(0, png.length), png);
+    const response = await fetch(base + '/api/v1/providers/' + evidenceTow.id + '/documents/' + license.id + '/content', { headers: { Cookie: `road_as_token=${evidenceOwner.token}` }, redirect: 'manual' });
+    assert.equal(response.status, 302); assert.equal(response.headers.get('location'), license.url);
+    assert.ok(license.s3Key.startsWith('roadassist/'));
+    assert.deepEqual(s3Fixture.objects.get(license.s3Key).subarray(0,png.length),png);
     assert.equal((await request(capacityOwner, 'GET', `/providers/${evidenceTow.id}/documents/${license.id}/content`)).status, 404);
     await ok(admin, 'PUT', `/admin/providers/${evidenceTow.id}/approve`, {});
     await login(evidenceOwner);
@@ -432,8 +433,8 @@ if (process.env.RUN_DB_TESTS !== '1') {
     assert.equal(blocked.status, 409);
     const old = await ok(admin, 'GET', `/providers/${evidenceTow.id}/audit`);
     assert.ok(old.items.find(event => event.action === 'APPROVED').after.documents.some(document => document.id === license.id));
-    const historical = await fetch(base + '/api/v1/providers/' + evidenceTow.id + '/documents/' + license.id + '/content', { headers: { Cookie: `road_as_token=${admin.token}` } });
-    assert.equal(historical.status, 200); await historical.arrayBuffer();
+    const historical = await fetch(base + '/api/v1/providers/' + evidenceTow.id + '/documents/' + license.id + '/content', { headers: { Cookie: `road_as_token=${admin.token}` }, redirect: 'manual' });
+    assert.equal(historical.status, 302); assert.equal(historical.headers.get('location'), license.url);
     await ok(admin, 'PUT', `/admin/providers/${evidenceTow.id}/approve`, {}); await login(evidenceOwner);
     await ok(evidenceOwner, 'PUT', `/providers/${evidenceTow.id}`, { licenseNumber: 'NEW-LICENSE-NUMBER' });
     const stale = await request(admin, 'PUT', `/admin/providers/${evidenceTow.id}/approve`, { reason: 'Kiểm tra giấy phép thay đổi' });
