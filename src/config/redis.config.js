@@ -5,7 +5,7 @@ const redis = new Redis({
   lazyConnect: true,
   connectTimeout: 10000,
   maxRetriesPerRequest: 1,
-  retryStrategy: times => times <= 3 ? Math.min(times * 200, 2000) : null,
+  retryStrategy: (times) => (times <= 3 ? Math.min(times * 200, 2000) : null),
 });
-redis.on("error", error => console.error("[REDIS]:", error.message));
+redis.on("error", (error) => console.error("[REDIS]:", error.message));
 module.exports = redis;

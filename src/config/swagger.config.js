@@ -1,1 +1,1 @@
-module.exports = require('../swagger');
+module.exports = require("../swagger");

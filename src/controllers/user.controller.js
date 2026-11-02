@@ -12,7 +12,11 @@ module.exports = {
       await UserService.update(req.user.userId, req.validated),
     ),
   async onboard(req, res) {
-    const session = await UserService.onboard(req.user.userId, req.validated, requestContext(req));
+    const session = await UserService.onboard(
+      req.user.userId,
+      req.validated,
+      requestContext(req),
+    );
     return Response.success(res, setSessionCookies(res, session));
   },
   activeVehicle: async (req, res) =>
