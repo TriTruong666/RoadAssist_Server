@@ -12,6 +12,7 @@ const { NotFoundException } = require("./src/common/exceptions/BaseException");
 require("./src/models");
 const app = express();
 const server = http.createServer(app);
+let hazardIO;
 app.set("trust proxy", config.app.trustProxy);
 app.use(require("morgan")("dev"));
 app.use(require("cors")({ origin: config.cors, credentials: true }));
@@ -44,7 +45,7 @@ app.use(
   "/api-docs",
   require("./src/middlewares/localhostOnly.middleware"),
   swaggerUi.serve,
-  swaggerUi.setup(require("./src/config/swagger.config"), { swaggerOptions: { withCredentials: true } }),
+  swaggerUi.setup(require("./src/swagger"), { swaggerOptions: { withCredentials: true } }),
 );
 app.use((req, res, next) => next(new NotFoundException()));
 app.use(require("./src/middlewares/error.handler"));
@@ -71,6 +72,7 @@ async function startServer() {
     await require("./src/seeds/user.seed").seedUsers();
     await initJobs();
     await initCronJobs();
+    hazardIO = require('./src/realtime/chat.socket')(server, app);
     await new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(config.app.port, () => {
@@ -90,6 +92,7 @@ async function startServer() {
 }
 async function stopServer() {
   await require("./src/jobs/cron").stopCronJobs();
+  if (hazardIO) { await new Promise(resolve => hazardIO.close(resolve)); hazardIO = null; }
   const closing = server.listening
     ? new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
