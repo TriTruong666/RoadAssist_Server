@@ -25,4 +25,31 @@ Provider.hasMany(ProviderDocument, { as: 'documents', foreignKey: 'providerId', 
 ProviderDocument.belongsTo(Provider, { foreignKey: 'providerId' });
 Provider.hasMany(ProviderAuditLog, { as: 'auditHistory', foreignKey: 'providerId', onDelete: 'CASCADE' });
 ProviderAuditLog.belongsTo(Provider, { foreignKey: 'providerId' });
-module.exports = { ProviderDocument, ProviderAuditLog, Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
+const HazardFlag = require('./hazard_flag.model');
+const HazardVote = require('./hazard_vote.model');
+const HazardImage = require('./hazard_image.model');
+const HazardMessage = require('./hazard_message.model');
+const SavedPlace = require('./saved_place.model');
+const SavedRoute = require('./saved_route.model');
+for (const Model of [HazardFlag, HazardVote, HazardMessage, SavedPlace, SavedRoute]) {
+ User.hasMany(Model, { foreignKey: 'userId', sourceKey: 'userId', onDelete: 'CASCADE' });
+ Model.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
+}
+for (const Model of [HazardVote, HazardImage, HazardMessage]) {
+ HazardFlag.hasMany(Model, { foreignKey: 'flagId', onDelete: 'CASCADE' });
+ Model.belongsTo(HazardFlag, { foreignKey: 'flagId' });
+}
+const { ChatRoom, ChatMessage, ChatParticipant } = require('./chat.model');
+const S3Asset = require('./s3_asset.model');
+const StorageCleanup = require('./storage_cleanup.model');
+for (const Model of [ChatMessage, ChatParticipant]) {
+ ChatRoom.hasMany(Model, { foreignKey: 'roomId', onDelete: 'CASCADE' });
+ Model.belongsTo(ChatRoom, { foreignKey: 'roomId' });
+}
+User.hasMany(S3Asset, { foreignKey: 'userId', sourceKey: 'userId' });
+S3Asset.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
+User.hasMany(ChatMessage, { foreignKey: 'senderId', sourceKey: 'userId' });
+ChatMessage.belongsTo(User, { foreignKey: 'senderId', targetKey: 'userId' });
+User.hasMany(ChatParticipant, { foreignKey: 'userId', sourceKey: 'userId' });
+ChatParticipant.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
+module.exports = { ChatRoom, ChatMessage, ChatParticipant, S3Asset, StorageCleanup,  HazardFlag, HazardVote, HazardImage, HazardMessage, SavedPlace, SavedRoute,  ProviderDocument, ProviderAuditLog, Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
