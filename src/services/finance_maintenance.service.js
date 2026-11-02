@@ -4,6 +4,7 @@ const Bills = require("./bill.service");
 const Locks = require("./finance_lock.service");
 module.exports = async () => {
   await Bills.backfill();
+  await require("./dispute.service").expireResponses();
   const intents = await Intent.findAll({
     where: {
       method: "SEPAY",

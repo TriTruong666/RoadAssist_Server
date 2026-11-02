@@ -179,7 +179,8 @@ class Bills {
           })
         : null;
       for (const [type, title, value] of charges) {
-        const amount = zero ? "0.00" : Money.amount(Money.cents(value || 0));
+        const originalAmount = zero ? 0 : Money.cents(value || 0);
+        let amount = Money.amount(originalAmount);
         const [item, created] = await Item.findOrCreate({
           where: { ticketId: t.id, type },
           defaults: {
@@ -192,6 +193,9 @@ class Bills {
           },
           transaction,
         });
+        amount = Money.amount(
+          Math.max(0, originalAmount - Money.cents(item.disputeCredit)),
+        );
         if (
           !created &&
           (item.amount !== amount ||
@@ -437,6 +441,22 @@ class Bills {
         where: { billId: bill.id },
         order: [["createdAt", "ASC"]],
         attributes: { exclude: ["sepayReference"] },
+        transaction,
+      }),
+      disputeAwards: await require("../models").Dispute.findAll({
+        where: {
+          journeyId: bill.journeyId,
+          status: { [Op.in]: ["RESOLVED", "REJECTED"] },
+        },
+        attributes: [
+          "id",
+          "ticketId",
+          "adminResolution",
+          "awardAmount",
+          "debtCreditAmount",
+          "refundAmount",
+          "resolvedAt",
+        ],
         transaction,
       }),
       refunds: await Refund.findAll({

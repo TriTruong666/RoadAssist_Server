@@ -44,7 +44,7 @@ class Payouts {
     if (
       Dispute &&
       (await Dispute.count({
-        where: { ticketId: t.id, status: "OPEN" },
+        where: { ticketId: t.id, status: { [Op.in]: ["OPEN", "REVIEW"] } },
         transaction,
       }))
     )
@@ -71,7 +71,7 @@ class Payouts {
     await Locks.admin(actor);
     return (await this.candidates()).slice(offset, offset + limit);
   }
-  static async locked(actor, work) {
+  static async locked(actor, work, extraJourneyIds = []) {
     return Locks.transaction(async (transaction) => {
       await db.query("SELECT pg_advisory_xact_lock(657193, 6)", {
         transaction,
@@ -88,10 +88,13 @@ class Payouts {
         },
         transaction,
       });
-      const journeys = [...new Set(bills.map((b) => b.journeyId))];
-      if (journeys.length)
-        await Locks.lockJourneys(journeys, transaction, actor);
-      return work(transaction);
+      const journeys = [
+        ...new Set([...bills.map((b) => b.journeyId), ...extraJourneyIds]),
+      ];
+      const tickets = journeys.length
+        ? await Locks.lockJourneys(journeys, transaction, actor)
+        : [];
+      return work(transaction, tickets);
     });
   }
   static async create(actor) {
@@ -169,6 +172,15 @@ class Payouts {
             offset += use;
           }
         }
+        const recoveryOffset =
+          await require("./provider_recovery.service").reserve(
+            owner,
+            batch.id,
+            available,
+            transaction,
+            actor.userId,
+          );
+        available -= recoveryOffset;
         await Entry.create(
           {
             batchId: batch.id,
@@ -178,6 +190,7 @@ class Payouts {
             onlineCommission: Money.amount(onlineCommission),
             cashCommission: Money.amount(cashCommission),
             debtOffset: Money.amount(offset),
+            recoveryOffset: Money.amount(recoveryOffset),
             netAmount: Money.amount(available),
           },
           { transaction },
@@ -213,6 +226,10 @@ class Payouts {
       entries: await Entry.findAll({
         where: { batchId: batch.id },
         order: [["userId", "ASC"]],
+        transaction,
+      }),
+      recoveryOffsets: await require("../models").RecoveryOffset.findAll({
+        where: { batchId: batch.id },
         transaction,
       }),
       offsets: await Offset.findAll({
@@ -339,6 +356,11 @@ class Payouts {
         );
         await offset.update({ status: "SETTLED" }, { transaction });
       }
+      await require("./provider_recovery.service").settle(
+        id,
+        transaction,
+        actor.userId,
+      );
       await batch.update(
         {
           status: "SETTLED",
@@ -376,6 +398,11 @@ class Payouts {
       if (batch.status === "CANCELLED") return this.dto(batch, transaction);
       if (batch.status !== "PENDING")
         Policy.fail("PAYOUT_ALREADY_SETTLED", "Không hủy được lô đã chi trả");
+      await require("./provider_recovery.service").cancel(
+        id,
+        transaction,
+        actor.userId,
+      );
       await Offset.update(
         { status: "CANCELLED" },
         { where: { batchId: id, status: "RESERVED" }, transaction },
@@ -426,6 +453,9 @@ class Payouts {
       gross: Money.amount(gross),
       held: Money.amount(held),
       cashCommissionDebt: Money.amount(cashDebt),
+      disputeRecoveries: await require("./provider_recovery.service").balances(
+        actor.userId,
+      ),
       payments: rows
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(offset, offset + limit),
