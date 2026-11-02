@@ -52,4 +52,24 @@ User.hasMany(ChatMessage, { foreignKey: 'senderId', sourceKey: 'userId' });
 ChatMessage.belongsTo(User, { foreignKey: 'senderId', targetKey: 'userId' });
 User.hasMany(ChatParticipant, { foreignKey: 'userId', sourceKey: 'userId' });
 ChatParticipant.belongsTo(User, { foreignKey: 'userId', targetKey: 'userId' });
-module.exports = { ChatRoom, ChatMessage, ChatParticipant, S3Asset, StorageCleanup,  HazardFlag, HazardVote, HazardImage, HazardMessage, SavedPlace, SavedRoute,  ProviderDocument, ProviderAuditLog, Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
+const DispatchTicket = require('./dispatch_ticket.model');
+const DispatchEvent = require('./dispatch_event.model');
+const DispatchNotification = require('./dispatch_notification.model');
+// Preserve historical vehicle/provider IDs and snapshots after profile deletion.
+User.hasMany(DispatchTicket, {foreignKey:'userId',sourceKey:'userId',constraints:false});
+DispatchTicket.hasMany(DispatchEvent, {foreignKey:'ticketId',onDelete:'CASCADE'});
+DispatchEvent.belongsTo(DispatchTicket, {foreignKey:'ticketId'});
+const { Bill, BillItem, BillPayment } = require('./bill.model');
+const PaymentIntent = require('./payment_intent.model');
+const SepayReceipt = require('./sepay_receipt.model');
+const Refund = require('./refund.model');
+const { PayoutBatch, PayoutEntry, PayoutOffset } = require('./payout.model');
+const FinanceEvent = require('./finance_event.model');
+const FinanceNotice = require('./finance_notice.model');
+const BankTransferProof = require('./bank_transfer_proof.model');
+for (const Model of [BillItem,BillPayment,PaymentIntent,Refund]) { Bill.hasMany(Model,{foreignKey:'billId',onDelete:'RESTRICT'}); Model.belongsTo(Bill,{foreignKey:'billId'}); }
+PaymentIntent.hasMany(BillPayment,{foreignKey:'intentId',onDelete:'RESTRICT'});
+BillItem.hasMany(BillPayment,{foreignKey:'billItemId',onDelete:'RESTRICT'});
+PayoutBatch.hasMany(PayoutEntry,{foreignKey:'batchId',onDelete:'RESTRICT'});
+PayoutBatch.hasMany(PayoutOffset,{foreignKey:'batchId',onDelete:'RESTRICT'});
+module.exports = { BankTransferProof,  FinanceNotice,  Bill, BillItem, BillPayment, PaymentIntent, SepayReceipt, Refund, PayoutBatch, PayoutEntry, PayoutOffset, FinanceEvent,  DispatchTicket, DispatchEvent, DispatchNotification,  ChatRoom, ChatMessage, ChatParticipant, S3Asset, StorageCleanup,  HazardFlag, HazardVote, HazardImage, HazardMessage, SavedPlace, SavedRoute,  ProviderDocument, ProviderAuditLog, Provider, ProviderLocationHistory, PendingRegistration, User, AuthSession, VehicleProfile, VehicleRideConfig };
