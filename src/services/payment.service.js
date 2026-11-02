@@ -73,7 +73,7 @@ class Payments {
     }
     return result;
   }
-  static async create(actor, method, data) {
+  static async create(actor, method, data, context = {}) {
     const snapshot = await Bill.findByPk(data.billId);
     if (!snapshot || snapshot.userId !== actor.userId)
       fail("BILL_NOT_FOUND", "Không tìm thấy hóa đơn", 404);
@@ -89,155 +89,238 @@ class Payments {
         }),
       )
       .digest("hex");
+    const execute = async (transaction, tickets) => {
+      const bill = await Bills.syncJourney(snapshot.journeyId, transaction);
+      if (data.clientRequestId) {
+        const prior = await Intent.findOne({
+          where: {
+            userId: actor.userId,
+            clientRequestId: data.clientRequestId,
+          },
+          transaction,
+        });
+        if (prior) {
+          if (prior.fingerprint !== fingerprint)
+            fail(
+              "PAYMENT_IDEMPOTENCY_CONFLICT",
+              "Mã yêu cầu đã được dùng cho nội dung khác",
+            );
+          return this.dto(
+            prior,
+            await Pay.findAll({ where: { intentId: prior.id }, transaction }),
+          );
+        }
+      }
+      const selected = await Item.findAll({
+        where: {
+          billId: bill.id,
+          ...(data.billItemId && { id: data.billItemId }),
+          ...(data.ticketId && { ticketId: data.ticketId }),
+        },
+        transaction,
+        order: [["id", "ASC"]],
+      });
+      if (!selected.length)
+        fail("BILL_ITEM_NOT_FOUND", "Không tìm thấy hạng mục thanh toán", 404);
+      const allocations = [];
+      const priorIntents = new Set();
+      for (const item of selected) {
+        if (!Money.cents(item.amount)) continue;
+        if (!item.providerId || !item.providerUserId)
+          fail("PAYMENT_PROVIDER_UNASSIGNED", "Hạng mục chưa có đối tác nhận");
+        const payments = await Pay.findAll({
+          where: {
+            billItemId: item.id,
+            providerId: item.providerId,
+            status: { [Op.in]: ["PENDING", "HELD", "CONFIRMED"] },
+          },
+          transaction,
+        });
+        const received = payments
+          .filter((p) => p.status !== "PENDING")
+          .reduce((n, p) => n + Money.cents(p.appliedAmount), 0);
+        const promised = payments.filter((p) => p.status === "PENDING");
+        const reserved = promised.reduce(
+          (n, p) => n + Money.cents(p.appliedAmount),
+          0,
+        );
+        for (const p of promised) priorIntents.add(p.intentId);
+        const needed = Math.max(
+          0,
+          Money.cents(item.amount) - received - reserved,
+        );
+        if (needed) allocations.push({ item, amount: needed });
+      }
+      if (priorIntents.size && allocations.length === 0) {
+        const ids = [...priorIntents];
+        if (ids.length === 1) {
+          const previous = await Intent.findByPk(ids[0], { transaction });
+          const lines = await Pay.findAll({
+            where: { intentId: previous.id },
+            transaction,
+          });
+          if (
+            previous.method === method &&
+            lines.every((p) => selected.some((i) => i.id === p.billItemId))
+          )
+            return this.dto(previous, lines);
+        }
+        fail(
+          "PAYMENT_PENDING_EXISTS",
+          "Đã có phương thức đang chờ; hủy mã cũ trước khi đổi phương thức",
+        );
+      }
+      if (!allocations.length)
+        fail("PAYMENT_ALREADY_FUNDED", "Các hạng mục đã được thanh toán");
+      const amount = allocations.reduce((n, a) => n + a.amount, 0);
+      if (amount % 100 !== 0 || allocations.some((a) => a.amount % 100 !== 0))
+        fail(
+          "PAYMENT_VND_INTEGER_REQUIRED",
+          "Thanh toán VND phải có số tiền nguyên đồng",
+          400,
+        );
+      if (method === "CASH")
+        await require("./cash_eligibility.service").assert(
+          actor.userId,
+          transaction,
+        );
+      const code = this.code();
+      const intent = await Intent.create(
+        {
+          billId: bill.id,
+          userId: actor.userId,
+          code,
+          method,
+          amount: Money.amount(amount),
+          expiresAt:
+            method === "SEPAY"
+              ? new Date(Date.now() + config.paymentTtlMinutes * 60000)
+              : null,
+          bankSnapshot: bank,
+          clientRequestId: data.clientRequestId,
+          fingerprint,
+        },
+        { transaction },
+      );
+      const payments = [];
+      for (const [index, allocation] of allocations.entries()) {
+        const { item, amount } = allocation;
+        if (method === "CASH" && !item.cashCommittedAt)
+          await item.update({ cashCommittedAt: new Date() }, { transaction });
+        payments.push(
+          await Pay.create(
+            {
+              billId: bill.id,
+              billItemId: item.id,
+              intentId: intent.id,
+              providerId: item.providerId,
+              providerUserId: item.providerUserId,
+              amount: Money.amount(amount),
+              appliedAmount: Money.amount(amount),
+              method,
+              transactionCode: `${code}-${index + 1}`,
+              commissionBps: bps,
+              commissionRate: String(bps / 10000),
+            },
+            { transaction },
+          ),
+        );
+      }
+      await Bills.event(
+        bill.id,
+        "PAYMENT_INTENT_CREATED",
+        intent.id,
+        { method, amount: intent.amount },
+        transaction,
+        actor.userId,
+      );
+      return this.dto(intent, payments);
+    };
+    return context.transaction
+      ? execute(context.transaction, context.tickets)
+      : Locks.journey(snapshot.journeyId, actor, execute);
+  }
+  static async switchCashToSepay(actor, data) {
+    const bill = await Bill.findByPk(data.billId);
+    if (!bill || bill.userId !== actor.userId)
+      fail("BILL_NOT_FOUND", "Không tìm thấy hóa đơn", 404);
     return Locks.journey(
-      snapshot.journeyId,
+      bill.journeyId,
       actor,
       async (transaction, tickets) => {
-        const bill = await Bills.syncJourney(snapshot.journeyId, transaction);
-        if (data.clientRequestId) {
-          const prior = await Intent.findOne({
+        await Bills.syncJourney(bill.journeyId, transaction);
+        if (
+          data.clientRequestId &&
+          (await Intent.findOne({
             where: {
               userId: actor.userId,
               clientRequestId: data.clientRequestId,
             },
             transaction,
-          });
-          if (prior) {
-            if (prior.fingerprint !== fingerprint)
-              fail(
-                "PAYMENT_IDEMPOTENCY_CONFLICT",
-                "Mã yêu cầu đã được dùng cho nội dung khác",
-              );
-            return this.dto(
-              prior,
-              await Pay.findAll({ where: { intentId: prior.id }, transaction }),
-            );
-          }
-        }
-        const selected = await Item.findAll({
+          }))
+        )
+          return this.create(actor, "SEPAY", data, { transaction, tickets });
+        const items = await Item.findAll({
           where: {
             billId: bill.id,
-            ...(data.billItemId && { id: data.billItemId }),
             ...(data.ticketId && { ticketId: data.ticketId }),
+            ...(data.billItemId && { id: data.billItemId }),
           },
           transaction,
-          order: [["id", "ASC"]],
         });
-        if (!selected.length)
+        const promises = await Pay.findAll({
+          where: {
+            billItemId: { [Op.in]: items.map((i) => i.id) },
+            method: "CASH",
+            status: "PENDING",
+            appliedAmount: { [Op.gt]: 0 },
+          },
+          transaction,
+        });
+        if (!promises.length)
           fail(
-            "BILL_ITEM_NOT_FOUND",
-            "Không tìm thấy hạng mục thanh toán",
-            404,
+            "PAYMENT_NO_CASH_COMMITMENT",
+            "Không có cam kết tiền mặt cần đổi",
           );
-        const allocations = [];
-        const priorIntents = new Set();
-        for (const item of selected) {
-          if (!Money.cents(item.amount)) continue;
-          if (!item.providerId || !item.providerUserId)
+        for (const promise of promises) {
+          const item = items.find((i) => i.id === promise.billItemId);
+          const t = tickets.find((t) => t.id === item.ticketId);
+          if (!["4", "12"].includes(t?.status))
             fail(
-              "PAYMENT_PROVIDER_UNASSIGNED",
-              "Hạng mục chưa có đối tác nhận",
+              "PAYMENT_HANDOVER_REQUIRED",
+              "Chỉ đổi nợ của cuốc đã kết thúc sang online",
             );
-          const payments = await Pay.findAll({
-            where: {
-              billItemId: item.id,
-              providerId: item.providerId,
-              status: { [Op.in]: ["PENDING", "HELD", "CONFIRMED"] },
-            },
+        }
+        for (const intentId of new Set(promises.map((p) => p.intentId))) {
+          const intent = await Intent.findByPk(intentId, {
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+          });
+          const siblings = await Pay.findAll({
+            where: { intentId, status: "PENDING" },
             transaction,
           });
-          const received = payments
-            .filter((p) => p.status !== "PENDING")
-            .reduce((n, p) => n + Money.cents(p.appliedAmount), 0);
-          const promised = payments.filter((p) => p.status === "PENDING");
-          const reserved = promised.reduce(
-            (n, p) => n + Money.cents(p.appliedAmount),
-            0,
-          );
-          for (const p of promised) priorIntents.add(p.intentId);
-          const needed = Math.max(
-            0,
-            Money.cents(item.amount) - received - reserved,
-          );
-          if (needed) allocations.push({ item, amount: needed });
+          if (siblings.some((p) => !items.some((i) => i.id === p.billItemId)))
+            fail(
+              "PAYMENT_SCOPE_CONFLICT",
+              "Cần chọn toàn bộ cam kết tiền mặt này",
+            );
+          await Bills.cancelIntent(intent, "SWITCHED_TO_SEPAY", transaction);
         }
-        if (priorIntents.size && allocations.length === 0) {
-          const ids = [...priorIntents];
-          if (ids.length === 1) {
-            const previous = await Intent.findByPk(ids[0], { transaction });
-            const lines = await Pay.findAll({
-              where: { intentId: previous.id },
-              transaction,
-            });
-            if (
-              previous.method === method &&
-              lines.every((p) => selected.some((i) => i.id === p.billItemId))
-            )
-              return this.dto(previous, lines);
-          }
-          fail(
-            "PAYMENT_PENDING_EXISTS",
-            "Đã có phương thức đang chờ; hủy mã cũ trước khi đổi phương thức",
-          );
-        }
-        if (!allocations.length)
-          fail("PAYMENT_ALREADY_FUNDED", "Các hạng mục đã được thanh toán");
-        const amount = allocations.reduce((n, a) => n + a.amount, 0);
-        if (amount % 100 !== 0 || allocations.some((a) => a.amount % 100 !== 0))
-          fail(
-            "PAYMENT_VND_INTEGER_REQUIRED",
-            "Thanh toán VND phải có số tiền nguyên đồng",
-            400,
-          );
-        const code = this.code();
-        const intent = await Intent.create(
-          {
-            billId: bill.id,
-            userId: actor.userId,
-            code,
-            method,
-            amount: Money.amount(amount),
-            expiresAt:
-              method === "SEPAY"
-                ? new Date(Date.now() + config.paymentTtlMinutes * 60000)
-                : null,
-            bankSnapshot: bank,
-            clientRequestId: data.clientRequestId,
-            fingerprint,
-          },
-          { transaction },
-        );
-        const payments = [];
-        for (const [index, allocation] of allocations.entries()) {
-          const { item, amount } = allocation;
-          payments.push(
-            await Pay.create(
-              {
-                billId: bill.id,
-                billItemId: item.id,
-                intentId: intent.id,
-                providerId: item.providerId,
-                providerUserId: item.providerUserId,
-                amount: Money.amount(amount),
-                appliedAmount: Money.amount(amount),
-                method,
-                transactionCode: `${code}-${index + 1}`,
-                commissionBps: bps,
-                commissionRate: String(bps / 10000),
-              },
-              { transaction },
-            ),
-          );
-        }
+        await Bills.syncJourney(bill.journeyId, transaction);
+        const result = await this.create(actor, "SEPAY", data, {
+          transaction,
+          tickets,
+        });
         await Bills.event(
           bill.id,
-          "PAYMENT_INTENT_CREATED",
-          intent.id,
-          { method, amount: intent.amount },
+          "CASH_SWITCHED_TO_SEPAY",
+          result.id,
+          {},
           transaction,
           actor.userId,
         );
-        return this.dto(intent, payments);
+        return result;
       },
     );
   }
@@ -419,7 +502,7 @@ class Payments {
           { transaction },
         );
       }
-      if (!current.paymentId) {
+      if (!current.paymentId && !current.disputeId) {
         const intent = await Intent.findByPk(current.intentId, {
           transaction,
           lock: transaction.LOCK.UPDATE,
@@ -437,6 +520,18 @@ class Payments {
           done.reduce((n, r) => n + Money.cents(r.amount), 0);
         if (Money.cents(current.amount) > free)
           fail("REFUND_EXCEEDS_AVAILABLE", "Tiền hoàn vượt khoản dư thực nhận");
+      }
+      if (current.disputeId) {
+        const dispute = await require("../models").Dispute.findByPk(
+          current.disputeId,
+          { transaction, lock: transaction.LOCK.UPDATE },
+        );
+        if (
+          !dispute ||
+          dispute.status !== "RESOLVED" ||
+          Money.cents(dispute.refundAmount) !== Money.cents(current.amount)
+        )
+          fail("DISPUTE_REFUND_INVALID", "Phán quyết hoàn tiền không khớp");
       }
       await require("../models").BankTransferProof.create(
         {
@@ -472,6 +567,14 @@ class Payments {
         { billId: bill.id, refundId: current.id, amount: current.amount },
         transaction,
       );
+      if (current.disputeId)
+        await require("./dispute.service").event(
+          current.disputeId,
+          actor.userId,
+          "REFUND_COMPLETED",
+          { refundId: current.id, amount: current.amount, externalReference },
+          transaction,
+        );
       return current;
     });
   }
