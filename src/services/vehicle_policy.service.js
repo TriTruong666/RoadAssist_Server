@@ -2,7 +2,7 @@ const { Op } = require("sequelize");
 const sequelize = require("../config/postgres.config");
 const { ConflictException } = require("../common/exceptions/BaseException");
 const errors = require("../common/exceptions/error_codes");
-const TERMINAL_STATUSES = ["4", "5", "8", "12", "15"];
+const { TERMINAL: TERMINAL_STATUSES } = require("../common/dispatch.constants");
 class VehiclePolicyService {
   static async linkedProviders(vehicle, transaction) {
     const Provider = sequelize.models.Provider;

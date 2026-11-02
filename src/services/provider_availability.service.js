@@ -47,8 +47,10 @@ class ProviderAvailabilityService {
   static afterDispatchChange(profile, transaction) {
     if (!transaction) throw new Error('Dispatch cache reconciliation requires the assignment transaction');
     transaction.afterCommit(async () => {
+      try {
       const rows = profile.kind === 'SHOP' ? [profile] : await sequelize.models.Provider.findAll({ where: { vehicleProfileId: profile.vehicleProfileId } });
       for (const row of rows) await require('./location.service').syncProvider(row.id);
+      } catch (error) { console.error('[Dispatch cache reconciliation]', error.message); }
     });
   }
   // Must remain in the SAME transaction as the caller's ticket assignment. No public reservation endpoint.
