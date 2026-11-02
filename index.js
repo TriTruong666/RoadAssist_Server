@@ -16,8 +16,16 @@ let hazardIO;
 app.set("trust proxy", config.app.trustProxy);
 app.use(require("morgan")("dev"));
 app.use(require("cors")({ origin: config.cors, credentials: true }));
-app.use('/api/v1/payments/sepay/webhook', express.json({limit:'64kb',verify(req,res,buffer){req.rawBody=Buffer.from(buffer);}}));
-app.use(express.json({limit:'10mb'}));
+app.use(
+  "/api/v1/payments/sepay/webhook",
+  express.json({
+    limit: "64kb",
+    verify(req, res, buffer) {
+      req.rawBody = Buffer.from(buffer);
+    },
+  }),
+);
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(require("cookie-parser")());
 app.use(require("./src/middlewares/cookie_origin.middleware"));
@@ -46,7 +54,9 @@ app.use(
   "/api-docs",
   require("./src/middlewares/localhostOnly.middleware"),
   swaggerUi.serve,
-  swaggerUi.setup(require("./src/swagger"), { swaggerOptions: { withCredentials: true } }),
+  swaggerUi.setup(require("./src/swagger"), {
+    swaggerOptions: { withCredentials: true },
+  }),
 );
 app.use((req, res, next) => next(new NotFoundException()));
 app.use(require("./src/middlewares/error.handler"));
@@ -60,12 +70,15 @@ async function startServer() {
       );
     require("./src/services/jwt.service").assertConfigured();
     require("./src/utils/auth_cookie.util").assertCookieConfig();
-    require('./src/services/dispatch_policy.service').pricing();
-    require('./src/services/sepay.service').assertConfig();
+    require("./src/services/dispatch_policy.service").pricing();
+    require("./src/services/sepay.service").assertConfig();
+    require("./src/services/operations_config.service").assertConfigured();
     await sequelize.authenticate();
     await redis.connect();
     await redis.ping();
-    await require("./src/config/provider.migrations").prepareProviderSchema(sequelize);
+    await require("./src/config/provider.migrations").prepareProviderSchema(
+      sequelize,
+    );
     await sequelize.sync(
       config.db.force_reset ? { force: true } : { alter: true },
     );
@@ -75,7 +88,7 @@ async function startServer() {
     await require("./src/seeds/user.seed").seedUsers();
     await initJobs();
     await initCronJobs();
-    hazardIO = require('./src/realtime/chat.socket')(server, app);
+    hazardIO = require("./src/realtime/chat.socket")(server, app);
     await new Promise((resolve, reject) => {
       server.once("error", reject);
       server.listen(config.app.port, () => {
@@ -95,7 +108,10 @@ async function startServer() {
 }
 async function stopServer() {
   await require("./src/jobs/cron").stopCronJobs();
-  if (hazardIO) { await new Promise(resolve => hazardIO.close(resolve)); hazardIO = null; }
+  if (hazardIO) {
+    await new Promise((resolve) => hazardIO.close(resolve));
+    hazardIO = null;
+  }
   const closing = server.listening
     ? new Promise((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
