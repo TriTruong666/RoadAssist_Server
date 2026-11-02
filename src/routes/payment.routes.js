@@ -29,6 +29,19 @@ router.post(
   },
 );
 router.use(protect);
+router.get("/cash-eligibility", async (req, res) =>
+  R.success(
+    res,
+    await require("../services/cash_eligibility.service").read(req.user.userId),
+  ),
+);
+router.post(
+  "/switch-cash-to-sepay",
+  schema.create,
+  validate,
+  async (req, res) =>
+    R.created(res, await S.switchCashToSepay(req.user, req.validated)),
+);
 router.post("/create-sepay-qr", schema.create, validate, async (req, res) =>
   R.created(res, await S.create(req.user, "SEPAY", req.validated)),
 );

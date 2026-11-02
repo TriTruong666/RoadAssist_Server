@@ -132,4 +132,151 @@ for (const [path, kind, validation] of [
         await Service.handoff(req.user, req.validated.id, kind, req.validated),
       ),
   );
+router.post(
+  "/:id/request-rematch",
+  schema.id,
+  schema.rematch,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/dispatch_liveness.service").rematch(
+        req.user,
+        req.validated.id,
+        req.validated,
+      ),
+    ),
+);
+router.post(
+  "/:id/request-assistance",
+  schema.id,
+  schema.support,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/dispatch_support.service").request(
+        req.user,
+        req.validated.id,
+        req.validated,
+      ),
+    ),
+);
+router.post(
+  "/:id/intake/request",
+  schema.id,
+  schema.revision,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/shop_intake.service").requestAgain(
+        req.user,
+        req.validated.id,
+        req.validated,
+      ),
+    ),
+);
+router.post(
+  "/:id/intake/accept",
+  schema.id,
+  schema.reservation,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/shop_intake.service").decide(
+        req.user,
+        req.validated.id,
+        "accept",
+        req.validated,
+      ),
+    ),
+);
+router.post(
+  "/:id/intake/decline",
+  schema.id,
+  schema.reservation,
+  schema.reason,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/shop_intake.service").decide(
+        req.user,
+        req.validated.id,
+        "decline",
+        req.validated,
+      ),
+    ),
+);
+router.post(
+  "/:id/confirm-destination",
+  schema.id,
+  schema.reservation,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/shop_intake.service").confirmAlternative(
+        req.user,
+        req.validated.id,
+        req.validated,
+      ),
+    ),
+);
+router.post(
+  "/:id/reject-destination",
+  schema.id,
+  schema.reservation,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await require("../services/shop_intake.service").confirmAlternative(
+        req.user,
+        req.validated.id,
+        req.validated,
+        true,
+      ),
+    ),
+);
+const custody = require("../schemas/custody_dispute.schema");
+const Handovers = require("../services/handover.service");
+router.get("/:id/handovers", schema.id, validate, async (req, res) =>
+  R.success(res, await Handovers.list(req.user, req.validated.id)),
+);
+router.post(
+  "/:id/handovers",
+  schema.id,
+  custody.handover,
+  validate,
+  async (req, res) =>
+    R.created(
+      res,
+      await Handovers.propose(req.user, req.validated.id, req.validated),
+    ),
+);
+router.post(
+  "/:id/handovers/confirm",
+  schema.id,
+  custody.response,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await Handovers.respond(req.user, req.validated.id, req.validated),
+    ),
+);
+router.post(
+  "/:id/handovers/reject",
+  schema.id,
+  custody.rejection,
+  validate,
+  async (req, res) =>
+    R.success(
+      res,
+      await Handovers.respond(req.user, req.validated.id, req.validated, true),
+    ),
+);
 module.exports = router;

@@ -56,6 +56,24 @@ const revision = [
   body("expectedRevision").optional().isInt({ min: 1 }).toInt(),
 ];
 module.exports = {
+  reservation: [body("reservationId").isUUID(), ...revision],
+  rematch: [
+    body("reason").isIn(["NO_PROGRESS", "MISSED_ETA"]),
+    body("note").optional().isString().trim().isLength({ max: 500 }),
+    ...revision,
+  ],
+  support: [
+    body("reason").isIn([
+      "NO_PROGRESS",
+      "MISSED_ETA",
+      "GPS_LOST_IN_TRANSIT",
+      "DESTINATION_UNAVAILABLE",
+      "CUSTOMER_REQUEST",
+      "INTAKE_TIMEOUT",
+    ]),
+    body("note").optional().isString().trim().isLength({ max: 500 }),
+    ...revision,
+  ],
   id: [param("id").isUUID()],
   revision,
   location,
