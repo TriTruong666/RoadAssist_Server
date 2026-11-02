@@ -2,7 +2,7 @@
 
 ## Scope and authentication
 
-This implements the **chat section of Phase 7**, sharing one engine with Phase 4 hazard chat. Ratings, disputes, payouts and the production dispatch state machine remain in their respective roadmap phases. Chat HTTP APIs and Socket.IO authenticate using the HttpOnly `road_as_token` cookie; browser clients include credentials. Tokens, sender IDs, roles, versions and system events cannot be assigned by a chat message body.
+This implements the **chat section of Phase 7**, sharing one engine with Phase 4 hazard chat. Ratings and disputes remain in their roadmap phase. Phase 5 provides production dispatch; Phase 6 provides payment allocation, refund records and manual payout settlement. Chat HTTP APIs and Socket.IO authenticate using the HttpOnly `road_as_token` cookie; browser clients include credentials. Tokens, sender IDs, roles, versions and system events cannot be assigned by a chat message body.
 
 OpenAPI is maintained in `src/swagger/`: `index.js` composes Auth/User/Vehicle, Provider, Places/Hazards and Chat/Upload modules. Files in `src/config/*swagger*` are compatibility exports. `/api-docs` still serves the complete UI.
 
@@ -47,7 +47,7 @@ Both HTTP and socket sends broadcast after database commit. Duplicate client mes
 
 ## Phase 5 dispatch integration
 
-The production `DispatchTicket` model does not exist yet. DISPATCH chat fails closed with 503 `DISPATCH_NOT_AVAILABLE` until registered. Integration tests use a ticket fixture with roadmap fields `userId`, `providerId`, `status`, `chatVersion`.
+Phase 5 now registers the production `DispatchTicket` model. Its create/assign/requeue/handoff/completion transactions synchronize chat membership and archive old versions. The chat regression suites now use the production schema with fixture defaults; dispatch HTTP/state integration is covered separately.
 
 Phase 5 must call `ChatService.synchronizeDispatch(ticket, transaction)` in the **same transaction** that creates, assigns, unassigns, reassigns or terminates a ticket, after updating its fields. Follow the established dispatch/provider locking order. This helper:
 
@@ -89,3 +89,5 @@ Uploads participate in application rollback through compensation: if an image, m
 ## Verification
 
 `RUN_DB_TESTS=1 npm test` uses isolated PostgreSQL schemas/Redis namespaces and a deterministic AWS transport. Coverage includes archived membership, reassignment races, socket privacy, client retry idempotency, shared legacy quotas/history, image claims, S3 compensation/retry and idempotent legacy migrations. Test code never writes to the real bucket. A separate live connectivity check uploaded/read metadata/deleted a tiny object in `roadassist/`; AWS operations succeeded while anonymous HEAD returned 403 pending the console policy.
+
+Phase 5 transition messages broadcast after commit; see [DISPATCH_BUSINESS_RULES.md](DISPATCH_BUSINESS_RULES.md) for the current integration and payment boundary.

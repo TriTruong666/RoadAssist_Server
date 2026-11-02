@@ -306,3 +306,13 @@ sequenceDiagram
   feat(sepay-escrow): integrate sepay qr generation, webhook handler, escrow fund locking and admin payout batches
   ```
 
+
+### Hợp đồng bắt buộc với Dispatch Phase 5
+
+DispatchPaymentService.fundedForApproval khóa và kiểm tra Bill/BillItem/BillPayment theo ticket, rider, journey và provider hiện tại. Thanh toán chung nhiều ticket phải phân bổ billItemId. Khi tạo bill cho TOW đã ARRIVED, lấy phí chờ mới bằng DispatchPolicy.waiting / DispatchService.dto trong transaction, không đọc waitingFee cũ. Tôn trọng quoteVoided/chargesVoided; các event cancellation/unfixable/retarget yêu cầu đối soát lại bill items và tiền đã giữ trước khi refund/payout. Đọc [DISPATCH_BUSINESS_RULES.md](../DISPATCH_BUSINESS_RULES.md).
+
+## Trạng thái triển khai Phase 6
+
+Đã triển khai hóa đơn tự động theo journey/ticket/item, phân bổ thanh toán, mã VietQR SePay, inbox webhook bền vững chống trùng và xác thực API key/HMAC, tiền mặt/công nợ hoa hồng, escrow ứng dụng và điều kiện chốt sau nghiệm thu, đối soát/refund có biên nhận không tái sử dụng, batch/offset hoa hồng theo chủ tài khoản và chặn giải ngân khi hold/khiếu nại. Swagger riêng tại src/swagger/billing.swagger.js.
+
+Hợp đồng hiện hành: [BILLING_AND_PAYMENTS.md](../BILLING_AND_PAYMENTS.md). QR mới sử dụng mã RA + 20 chữ số và URL theo tài liệu SePay hiện hành; webhook phản hồi đúng {success:true} sau khi lưu inbox. Thao tác refund/settle ghi nhận chuyển khoản admin đã thực hiện; không tự gọi API chuyển tiền ngân hàng. Cấu hình mặc định giữ 7 ngày trước payout; giao dịch ngân hàng thật chưa được dùng trong kiểm thử.

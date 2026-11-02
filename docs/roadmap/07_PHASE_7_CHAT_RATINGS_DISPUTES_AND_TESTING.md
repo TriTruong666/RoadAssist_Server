@@ -225,4 +225,8 @@ module.exports = Dispute;
 
 Chat đã được hợp nhất với hazard Phase 4 bằng ChatRoom/ChatMessage/ChatParticipant, có phiên riêng khi đổi đối tác, lịch sử chỉ đọc theo thành viên, ảnh S3 public trong roadassist/, HTTP và Socket.IO chung xác thực cookie, idempotency và quota. Swagger được tách vào src/swagger/.
 
-Chi tiết tích hợp Dispatch Phase 5: [CHAT_AND_STORAGE.md](../CHAT_AND_STORAGE.md). Dispatch production, ratings, disputes và payment E2E vẫn thuộc các giai đoạn tương ứng; chưa được đánh dấu hoàn tất trong lần nâng cấp chat này.
+Chi tiết tích hợp Dispatch Phase 5: [CHAT_AND_STORAGE.md](../CHAT_AND_STORAGE.md). Dispatch production đã được nối ở Phase 5; ratings, disputes và payment E2E vẫn thuộc các giai đoạn tương ứng.
+
+### Tích hợp tài chính đã có sau Phase 6
+
+Khi mở dispute, khóa ticket và đặt disputeHold=true trong cùng transaction. Payout kiểm tra hold ở cả tạo lô và settle; mặc định chỉ đối soát sau 7 ngày. Khi thay đổi nghĩa vụ tiền, dùng BillService.syncJourney theo cùng thứ tự khóa và tôn trọng reservation/đã settle; không tự sửa BillPayment hay giải ngân/hoàn tiền chỉ bằng cờ trạng thái. Đọc [BILLING_AND_PAYMENTS.md](../BILLING_AND_PAYMENTS.md).
