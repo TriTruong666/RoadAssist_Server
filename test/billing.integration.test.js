@@ -96,8 +96,10 @@ else {
     assert.equal(response.status, status, JSON.stringify(data));
     return data.data === undefined ? data : data.data;
   }
-  const act = (actor, t, action, body = {}, status = 200) =>
-    request(actor, "POST", `/dispatch/${t.id}/${action}`, body, status);
+  const act = async (actor, t, action, body = {}, status = 200) => {
+    if (["start","resolve"].includes(action)) await require('./handover.fixture')(t.id,action === "start" ? "PICKUP" : "DELIVERY");
+    return request(actor, "POST", `/dispatch/${t.id}/${action}`, body, status);
+  };
   async function quote(
     amount = "100000",
     actor = rider,
@@ -231,7 +233,7 @@ else {
   });
   afterEach(async () => {
     await Sepay.processInbox();
-    const names = [
+    const names = ["Handover","Dispute","DisputeEvent","ProviderRecovery","RecoveryOffset",
       "BankTransferProof",
       "FinanceNotice",
       "FinanceEvent",

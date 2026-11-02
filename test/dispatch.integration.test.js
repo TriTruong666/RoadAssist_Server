@@ -169,8 +169,10 @@ else {
       201,
     );
   }
-  const action = (actor, ticket, name, body = {}, status = 200) =>
-    request(actor, "POST", `/dispatch/${ticket.id}/${name}`, body, status);
+  const action = async (actor, ticket, name, body = {}, status = 200) => {
+    if (["start","resolve"].includes(name)) await require('./handover.fixture')(ticket.id,name === "start" ? "PICKUP" : "DELIVERY");
+    return request(actor, "POST", `/dispatch/${ticket.id}/${name}`, body, status);
+  };
   async function accept(ticket, p = mobile, actor = mobileOwner) {
     return action(actor, ticket, "accept", { providerId: p.id });
   }
@@ -634,8 +636,10 @@ else {
     });
     await accept(t, tow, towOwner);
     await action(towOwner, t, "arrive");
+    await request(shopper,"POST",`/dispatch/${t.id}/intake/accept`,{reservationId:t.intakeReservationId});
     await fund(t);
     await action(rider, t, "start");
+    await require("./handover.fixture")(t.id,"DELIVERY");
     Ticket.addHook("beforeCreate", "delivery-failure", (child) => {
       if (child.handoffKind === "TOW_DELIVERY")
         throw new Error("Child unavailable");
@@ -983,7 +987,7 @@ else {
       if (replacement) await replacement.destroy();
     }
   });
-  test("a busy destination shop still receives and can decline its pending delivered intake without private rider data", async () => {
+  test("a busy destination must reserve before departure and cannot decline committed delivery", async () => {
     const occupied = await create("walk-in");
     await accept(occupied, shop, shopper);
     await shop.update({ maxConcurrentJobs: 1 });
@@ -991,6 +995,9 @@ else {
       const t = await create("tow", { dropoffShopId: shop.id });
       await accept(t, tow, towOwner);
       await action(towOwner, t, "arrive");
+      await request(shopper,"POST",`/dispatch/${t.id}/intake/accept`,{reservationId:t.intakeReservationId},409);
+      await Ticket.update({status:'4'},{where:{id:occupied.id}});
+      await request(shopper,"POST",`/dispatch/${t.id}/intake/accept`,{reservationId:t.intakeReservationId});
       await fund(t);
       await action(rider, t, "start");
       await action(rider, t, "resolve");
@@ -1010,11 +1017,10 @@ else {
       const intake = list.items.find((item) => item.id === child.id);
       assert.ok(intake);
       assert.equal(intake.userId, undefined);
-      const rejected = await action(shopper, child, "decline", {
-        reason: "Chưa có chỗ nhận xe",
-      });
-      assert.equal(rejected.status, "8");
-      assert.equal(rejected.vehicleSnapshot, undefined);
+      await action(shopper, child, "decline", {reason:"Chưa có chỗ nhận xe"},409);
+      const support=await action(shopper,child,"request-assistance",{reason:"DESTINATION_UNAVAILABLE",note:"Cần hỗ trợ xe đã giao"});
+      assert.equal(support.status,"OPEN");
+      assert.equal((await Ticket.findByPk(child.id)).status,"1");
     } finally {
       await shop.update({ maxConcurrentJobs: 20 });
     }
