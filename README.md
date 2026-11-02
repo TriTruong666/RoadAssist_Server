@@ -166,3 +166,11 @@ The complete provider contract is documented in [docs/PROVIDER_BUSINESS_RULES.md
 - Mobile discovery requires a GOOD trusted GPS fix. Missing accuracy, accuracy over the configured threshold (default 100m), or an implausible jump makes the fix unusable for dispatch; the previous trusted point is preserved and the provider is removed from discovery. This does not ban the account. Existing trip GPS remains private when duty is off or a provider is suspended.
 
 `PROVIDER_GPS_MAX_ACCURACY_METERS` may be set from 1 to 1000. Images are JPEG/PNG/WebP, maximum 5MB each; limits include withdrawn history (10 active/50 total/100MB per profile; 200 total/200MB per owner). Retrying identical current evidence is idempotent.
+
+## Rescue operational safeguards
+
+[Operational rules](docs/OPERATIONS_SAFEGUARDS.md) cover unpaid cash eligibility, queue expiry, progress-based rider rematching, support cases and reserved shop intake before towing. Swagger includes the new payment, intake and admin support endpoints. In-progress transport and delivered vehicles never auto-release on timeout.
+
+## Handover and disputes
+
+[Handover and dispute rules](docs/HANDOVER_AND_DISPUTES.md) cover two-party condition reports, before/after towing photos, seven-day claims, response deadlines, payout holds, admin rulings and audited refunds/recovery. Swagger exposes participant and admin endpoints.

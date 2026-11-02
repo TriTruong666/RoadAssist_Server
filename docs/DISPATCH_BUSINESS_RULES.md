@@ -98,7 +98,7 @@ Mobile/tow acceptance requires duty, capability/capacity and a trusted fix recei
 | 14 EST_APPROVED | Pending TOW with approved estimate; tow acceptance →2 |
 | 15 UNFIXABLE | Terminal repair failure with evidence; rider acknowledges →12 or creates linked rescue |
 
-Once a TOW has a driver, estimates are tracked in `estimateStatus` and never replace MATCHED/ARRIVED transport state. Estimates carry `estimateVersion`; approval/rejection must specify that exact version. They expire after 24 hours, enforced on approval and by the minute maintenance job. Expiry returns only pending TOWs to state 1 and never rewinds an assigned/arrived trip. Retargeting before transport recalculates fare, clears estimate/approval and advances estimateVersion. Destination changes after transport starts are rejected.
+Once a TOW has a driver, estimates are tracked in `estimateStatus` and never replace MATCHED/ARRIVED transport state. Estimates carry `estimateVersion`; approval/rejection must specify that exact version. They expire after 24 hours, enforced on approval and by the minute maintenance job. Expiry returns only pending TOWs to state 1 and never rewinds an assigned/arrived trip. Retargeting before transport recalculates fare, clears estimate/approval and advances estimateVersion. Normal rider retargeting after transport starts is rejected; supported alternatives follow the admin → new shop → rider acceptance flow in [OPERATIONS_SAFEGUARDS.md](OPERATIONS_SAFEGUARDS.md).
 
 Repair quote is a single immutable amount. An identical retry returns the current ticket; a different replacement returns `DISPATCH_QUOTE_ALREADY_SUBMITTED`. Repair providers cannot mark READY before funded approval, and cannot accept delivery on the rider's behalf.
 
@@ -142,7 +142,7 @@ A rider consents to each new rescue through the handoff endpoints; a provider of
 - READY repair → `/return-tow`: fresh rider GPS must be over 1 km away, accounting for uncertainty. This action constitutes rider acceptance of the finished repair and atomically resolves it before opening the return TOW, so the vehicle's one-open-ticket rule holds. The return destination is the rider's validated location.
 - Completed TOW to a shop: in one transaction, resolve the TOW and create a linked pending WALK_IN for the same vehicle/journey. A CAR delivered by TOW is allowed in this internal shop intake; direct rider WALK_IN remains SOLO bike only. The child preserves repair capabilities and an unexpired approved destination estimate, with its own single binding final quote.
 
-Shop intake does not auto-accept or reserve a bay. Even a busy destination receives its targeted intake notification/list entry and can decline it; unassigned intake details remain redacted. The destination must accept through the normal live capability/duty/capacity checks; it can decline a pending intake. Failing child creation rolls the TOW completion back, retaining the driver's capacity and current chat version.
+A shop must reserve a real bay before towing starts. IN_TRANSIT and DELIVERED reservations never auto-expire. Delivery creates the pending intake; shop acceptance consumes the reservation atomically without counting two bays. The shop cannot decline/cancel that committed intake and must request support if unavailable. Failing child creation rolls completion back. See [OPERATIONS_SAFEGUARDS.md](OPERATIONS_SAFEGUARDS.md) for deadlines, rematching, cash eligibility and assisted destination changes.
 
 ## Notifications and chat
 
@@ -159,3 +159,7 @@ Invalid input returns 400; missing/stale session 401; inactive account or unfund
 `RUN_DB_TESTS=1 npm test` creates isolated PostgreSQL schemas/Redis namespaces. Dispatch coverage includes all fifteen states, conflicting accepts/creation, shared rescue vehicles, immutable quote/payment authority, waiting rounding/cap/freeze, driver requeue/privacy, exclusion evasion, evidence/audit/child rollback, destination estimates, direct handoff, return towing, outbox/socket system events and code-collision retry. AWS uses the existing fake transport; payment fixtures verify the gate without claiming a real Phase 6 integration.
 
 Current payment allocation, refund and payout contract: [BILLING_AND_PAYMENTS.md](BILLING_AND_PAYMENTS.md).
+
+## Vehicle handover evidence
+
+New and active TOWs require versioned PICKUP/DELIVERY condition reports with 2–8 owned images and explicit existing/observed damages. The rider confirms pickup; destination shop owner (or rider for coordinate destinations) confirms delivery. GPS remains an additional location check. Start and completion enforce current consent; rerouting invalidates old-destination consent. See [HANDOVER_AND_DISPUTES.md](HANDOVER_AND_DISPUTES.md) for the API and legacy-trip behavior.

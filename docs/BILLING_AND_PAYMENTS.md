@@ -110,7 +110,7 @@ A bank transfer reference cannot be reused to attest both a refund and a payout.
 
 ## Payout batches and commission debt
 
-Eligibility is checked when reserving **and** settling. Only positive CONFIRMED allocations whose ticket is rider-resolved/acknowledged qualify. Default release delay is seven days from resolvedAt, matching the future dispute window. `disputeHold`, an OPEN Dispute model if registered, pending allocation refunds and prior reservation block release. HELD funds and unconfirmed cash cannot be paid out. Phase 7 must set disputeHold under the same ticket transaction when opening a dispute.
+Eligibility is checked when reserving **and** settling. Only positive CONFIRMED allocations whose ticket is rider-resolved/acknowledged qualify. Default release delay is seven days from resolvedAt, matching the future dispute window. `disputeHold`, an OPEN/REVIEW Dispute case, pending allocation refunds and prior reservation block release. HELD funds and unconfirmed cash cannot be paid out. Dispute filing sets disputeHold under the same financial locks; OPEN/REVIEW cases both block payout.
 
 A global database advisory lock serializes payout batch operations. Journey owner/ticket/payment locks and reservation records prevent duplicate inclusion and double use of a cash debt. Cash commission is tracked by captured owner account, so revoking/recreating a Provider cannot remove debt. Historical profiles can still have earned receipts and debts.
 
@@ -146,3 +146,11 @@ Finance notifications are durable rows plus best-effort Socket.IO events: PAYMEN
 Database work is retried for deadlock/serialization/lock timeout and remains transactional with dispatch, debt reservations, refund/proof records and journal writes. External payment/transfer APIs are not called while holding database locks.
 
 `RUN_DB_TESTS=1 npm test` uses isolated PostgreSQL schemas and Redis prefixes, fake merchant values and synthetic authenticated webhooks. It covers real API flow through dispatch → cash/QR → approval → completion → commission → payout, plus replay, amount/account mismatch, partial/extra/late money, HMAC tampering, fee top-ups, unfixable refunds, owner-wide debt carry, batch races, dispute delay, manual reconciliation, proof reuse and rollback. These tests do not transfer real money or claim a live merchant integration has been verified.
+
+## Completed cash obligations
+
+New cash promises are subject to rider eligibility: default 24 hour grace and maximum two unpaid completed requests. Online rescue remains available. `/payments/cash-eligibility` and atomic `/payments/switch-cash-to-sepay` support repayment; creating a QR does not clear debt. See [OPERATIONS_SAFEGUARDS.md](OPERATIONS_SAFEGUARDS.md) for scope, configuration and migration rules.
+
+## Adjudicated refunds and provider recovery
+
+[HANDOVER_AND_DISPUTES.md](HANDOVER_AND_DISPUTES.md) defines the implemented Phase 7 flow. Unpaid awards become persistent item credits; paid awards become separate dispute compensation/refund and immutable provider recovery, preserving historical collected-service commission and settled batches. Pending provider batches are cancelled atomically for rebuilding with recovery offsets. Refund completion still requires unique manual bank-transfer proof. Provider earnings exposes recovery balances; case history records reservation, cancellation and settlement.
