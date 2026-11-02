@@ -29,6 +29,7 @@ const User = sequelize.define(
     },
     password: { type: DataTypes.STRING, allowNull: false },
     phone: { type: DataTypes.STRING(20), unique: true, allowNull: false },
+    reputationPoints: { type: DataTypes.INTEGER, defaultValue: 0, allowNull: false, field: 'reputation_points' },
     avatar: { type: DataTypes.STRING(2048), allowNull: true },
     role: {
       type: DataTypes.ENUM(...ROLES),
@@ -111,6 +112,7 @@ User.prototype.toJSON = function () {
     "email",
     "phone",
     "avatar",
+    "reputationPoints",
     "role",
     "services",
     "requestedServices",
