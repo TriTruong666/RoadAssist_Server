@@ -403,3 +403,8 @@ const paths = {
 };
 paths["/api/v1/auth/refresh-token"].post.security = [{ refreshCookieAuth: [] }];
 module.exports = { schemas, paths };
+
+for (const name of ['Vehicle','CreateVehicleRequest','UpdateVehicleRequest']) {
+ const schema = schemas[name];
+ if (schema?.properties) Object.assign(schema.properties, {length:{type:'number',minimum:0.5,maximum:20,nullable:name==='Vehicle'},weightKg:{type:'number',minimum:20,maximum:50000,nullable:name==='Vehicle'}});
+}
