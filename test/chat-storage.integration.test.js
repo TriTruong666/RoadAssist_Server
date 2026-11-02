@@ -5,7 +5,7 @@ else{
  const fixture=require('./s3.fixture');const {app}=require('../index');const db=require('../src/config/postgres.config');const redis=require('../src/config/redis.config');const {DataTypes:D}=require('sequelize');
  const {User,Provider,ChatRoom,ChatParticipant,ChatMessage,S3Asset,HazardFlag,HazardMessage,HazardImage,StorageCleanup}=require('../src/models');
  const Chat=require('../src/services/chat.service');const Storage=require('../src/services/s3.service');const Auth=require('../src/services/auth.service');
- const Ticket=db.define('DispatchTicket',{id:{type:D.UUID,primaryKey:true,defaultValue:D.UUIDV4},userId:{type:D.UUID,allowNull:false},providerId:D.UUID,status:{type:D.STRING,defaultValue:'2'},chatVersion:{type:D.INTEGER,defaultValue:1}});
+ const Ticket=require('./dispatch.fixture');
  let server,io,base,rider,first,second,outsider,provider1,provider2;const sockets=[];
  const origin={latitude:10.77,longitude:106.69};
  async function account(n){const user=await User.create({name:`Chat ${n}`,email:`chat-${n}@example.com`,phone:`09330000${String(n).padStart(2,'0')}`,password:'Chat-integration-strong-password!',emailVerifiedAt:new Date()});const session=await Auth.completeLogin({userId:user.userId,ipAddress:'127.0.0.1'});return{userId:user.userId,token:session.token};}

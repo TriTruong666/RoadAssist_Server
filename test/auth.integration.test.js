@@ -64,10 +64,7 @@ if (!enabled) {
       profile.name ||= 'Provider fixture'; profile.phone ||= '0900000000'; profile.address ||= 'Test address';
       profile.latitude ??= 10.77; profile.longitude ??= 106.69;
     });
-    DispatchTicket = sequelize.define('DispatchTicket', {
-      id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
-      vehicleProfileId: DataTypes.UUID, providerId: DataTypes.UUID, status: DataTypes.STRING,
-    }, { tableName: 'dispatch_test_tickets' });
+    DispatchTicket = require('./dispatch.fixture');
     await sequelize.sync();
     await redis.connect();
     server = app.listen(0, '127.0.0.1');

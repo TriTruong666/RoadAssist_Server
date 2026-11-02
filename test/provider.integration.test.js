@@ -238,8 +238,7 @@ if (process.env.RUN_DB_TESTS !== '1') {
     await ok(admin, 'PUT', `/admin/providers/${mobile.id}/approve`, {});
   });
   test('busy providers cannot revoke/change license or vehicle; off-duty trip GPS remains private', async () => {
-    const Ticket = sequelize.define('DispatchTicket', { id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
-      providerId: DataTypes.UUID, vehicleProfileId: DataTypes.UUID, status: DataTypes.STRING }, { tableName: 'phase3_test_tickets' });
+    const Ticket = require('./dispatch.fixture');
     await Ticket.sync();
     const ticket = await Ticket.create({ providerId: tow.id, vehicleProfileId: randomUUID(), status: '2' });
     assert.equal((await request(owner, 'POST', `/providers/${tow.id}/revoke`, {})).status, 409);
