@@ -117,6 +117,11 @@ class Dispatch {
       { ...fields, revision: ticket.revision + 1 },
       { transaction },
     );
+    await require("./shop_intake.service").onChange(
+      ticket,
+      action,
+      transaction,
+    );
     await Event.create(
       {
         ticketId: ticket.id,
@@ -165,9 +170,14 @@ class Dispatch {
         lock: transaction.LOCK.UPDATE,
       });
       if (
-        ["providerId", "dropoffShopId", "targetProviderId"].some(
-          (key) => ticket[key] !== snapshot[key],
-        )
+        [
+          "providerId",
+          "dropoffShopId",
+          "targetProviderId",
+          "candidateShopId",
+          "intakeReservationId",
+          "candidateIntakeReservationId",
+        ].some((key) => ticket[key] !== snapshot[key])
       ) {
         const e = new Error("Assignment changed");
         e.original = { code: "40001" };
@@ -319,6 +329,8 @@ class Dispatch {
         vehicleSnapshot: snapshot,
         pricingSnapshot,
         requirements,
+        handoverRequired: type === "TOW",
+        queueExpiresAt: require("./dispatch_liveness.service").queueDeadline(),
         type,
         pickupLatitude,
         pickupLongitude,
@@ -383,6 +395,8 @@ class Dispatch {
       },
       { transaction },
     );
+    if (ticket.type === "TOW" && ticket.dropoffShopId)
+      await require("./shop_intake.service").request(ticket, transaction);
     await Chat.synchronizeDispatch(ticket, transaction);
     await require("./bill.service").syncJourney(ticket.journeyId, transaction);
     await Notify.enqueue(ticket, actor.userId, "dispatch-created", transaction);
@@ -425,6 +439,12 @@ class Dispatch {
         throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
       if (t.providerId === p.id && t.status === S.MATCHED) return this.dto(t);
       Policy.state(t, PENDING);
+      if (
+        t.handoffKind !== "TOW_DELIVERY" &&
+        t.queueExpiresAt &&
+        t.queueExpiresAt <= new Date()
+      )
+        Policy.fail("DISPATCH_QUEUE_EXPIRED", "Yêu cầu đã quá hạn chờ nhận");
       Policy.providerKind(p, t.type);
       if (t.targetProviderId && t.targetProviderId !== p.id)
         Policy.fail("DISPATCH_TARGET_MISMATCH", "Phiếu dành cho đối tác khác");
@@ -436,10 +456,15 @@ class Dispatch {
           "DISPATCH_PROVIDER_EXCLUDED",
           "Đối tác đã hủy hoặc từ chối phiếu này",
         );
+      const reserved =
+        t.type === "WALK_IN"
+          ? await require("./shop_intake.service").consume(t, p.id, transaction)
+          : null;
       const profile = await Availability.lockForAssignment(
         p.id,
         t.requirements,
         transaction,
+        { honorReservation: !!reserved },
       );
       if (profile.kind !== "SHOP") Policy.freshFix(profile);
       const distance = distanceMeters(profile, {
@@ -458,6 +483,20 @@ class Dispatch {
         waitingMinutes: 0,
         waitingFee: "0.00",
         assignmentDistanceMeters: distance,
+        queueExpiresAt: null,
+        arrivalDueAt:
+          t.type === "WALK_IN"
+            ? null
+            : new Date(
+                Date.now() +
+                  require("../config/app.config").operations
+                    .arrivalTimeoutMinutes *
+                    60000,
+              ),
+        lastProgressAt: new Date(),
+        lastProgressDistanceMeters: distance,
+        noShowDetectedAt: null,
+        safetyEscalatedAt: null,
       };
       if (t.type === "SOS") {
         fields.callOutFee =
@@ -567,6 +606,8 @@ class Dispatch {
             );
           if (t.status === S.IN_PROGRESS) return this.dto(t);
           Policy.state(t, [S.ARRIVED]);
+          await require("./handover.service").require(t, "PICKUP", transaction);
+          await require("./shop_intake.service").beforeStart(t, transaction);
           const waitingEnd = new Date();
           fields = {
             ...Policy.waiting(t, waitingEnd),
@@ -593,6 +634,11 @@ class Dispatch {
           if (t.status === S.RESOLVED) return this.dto(t);
           Policy.state(t, t.type === "TOW" ? [S.IN_PROGRESS] : [S.READY]);
           if (t.type === "TOW") {
+            await require("./handover.service").require(
+              t,
+              "DELIVERY",
+              transaction,
+            );
             p = await Provider.findByPk(t.providerId, { transaction });
             Policy.trustedLocation(p, {
               latitude: t.dropoffLatitude,
@@ -641,6 +687,19 @@ class Dispatch {
           fields = { status: S.RESOLVED_UNFIXABLE, resolvedAt: new Date() };
           break;
         case "decline":
+          if (
+            await require("../models").ShopIntakeReservation.count({
+              where: {
+                childTicketId: t.id,
+                status: { [Op.in]: ["DELIVERED", "CONSUMED"] },
+              },
+              transaction,
+            })
+          )
+            Policy.fail(
+              "INTAKE_COMMITMENT_LOCKED",
+              "Xe đã được giao theo cam kết; cần tiếp nhận hoặc yêu cầu hỗ trợ",
+            );
           Policy.state(t, [S.PENDING]);
           if (t.type !== "WALK_IN")
             Policy.fail(
@@ -756,6 +815,7 @@ class Dispatch {
             { transaction },
           );
         await this.link(t, child, transaction);
+        await require("./shop_intake.service").delivered(t, child, transaction);
       }
       return action === "decline" ? Notify.summary(t) : this.dto(t);
     });
@@ -787,6 +847,20 @@ class Dispatch {
       if (!rider)
         p = await Policy.profileActor(actor, t, transaction, { target: true });
       if (rider && t.status === S.CANCELLED) return this.dto(t);
+      if (
+        !rider &&
+        (await require("../models").ShopIntakeReservation.count({
+          where: {
+            childTicketId: t.id,
+            status: { [Op.in]: ["DELIVERED", "CONSUMED"] },
+          },
+          transaction,
+        }))
+      )
+        Policy.fail(
+          "INTAKE_COMMITMENT_LOCKED",
+          "Không hủy đơn xe đã giao theo cam kết; hãy ghi nhận không sửa được có bằng chứng hoặc yêu cầu hỗ trợ",
+        );
       if (rider)
         Policy.state(t, [
           ...PENDING,
@@ -826,6 +900,13 @@ class Dispatch {
           ],
           ...(t.type === "SOS" && { travelFee: "0.00" }),
           assignmentDistanceMeters: null,
+          queueExpiresAt:
+            require("./dispatch_liveness.service").queueDeadline(),
+          arrivalDueAt: null,
+          lastProgressAt: null,
+          lastProgressDistanceMeters: null,
+          noShowDetectedAt: null,
+          safetyEscalatedAt: null,
         };
       else if (t.type === "TOW") Object.assign(fields, Policy.waiting(t));
       fields.totalAmount =
@@ -1084,6 +1165,13 @@ class Dispatch {
     const literal = require("sequelize").literal;
     const escapedId = db.escape(p.id);
     const conditions = [
+      {
+        [Op.or]: [
+          { queueExpiresAt: null },
+          { queueExpiresAt: { [Op.gt]: new Date() } },
+          { handoffKind: "TOW_DELIVERY" },
+        ],
+      },
       literal(`(${distance}) <= 15000`),
       literal(`NOT (${escapedId}::uuid = ANY("former_assigned_shop_ids"))`),
       literal(
@@ -1141,7 +1229,8 @@ class Dispatch {
     if (
       t.userId !== actor.userId &&
       !ids.includes(t.providerId) &&
-      !ids.includes(t.dropoffShopId)
+      !ids.includes(t.dropoffShopId) &&
+      !ids.includes(t.candidateShopId)
     ) {
       if (PENDING.includes(t.status)) {
         for (const p of profiles)
@@ -1157,7 +1246,7 @@ class Dispatch {
     if (
       t.userId !== actor.userId &&
       !ids.includes(t.providerId) &&
-      ids.includes(t.dropoffShopId)
+      (ids.includes(t.dropoffShopId) || ids.includes(t.candidateShopId))
     )
       return {
         ...Notify.summary(t),
@@ -1166,6 +1255,7 @@ class Dispatch {
         estimateStatus: t.estimateStatus,
         estimateVersion: t.estimateVersion,
         estimateExpiresAt: t.estimateExpiresAt,
+        intakes: await require("./shop_intake.service").read(actor, t),
         description: t.description,
         images: t.images,
         vehicle: {
@@ -1175,6 +1265,15 @@ class Dispatch {
         },
       };
     const data = this.dto(t);
+    data.operations = require("./dispatch_liveness.service").status(
+      t,
+      t.providerId ? await Provider.findByPk(t.providerId) : null,
+    );
+    data.intakes = await require("./shop_intake.service").read(actor, t);
+    data.supportCases = await require("../models").DispatchSupportCase.findAll({
+      where: { ticketId: t.id },
+      order: [["createdAt", "DESC"]],
+    });
     data.events = await Event.findAll({
       where: { ticketId: id },
       order: [

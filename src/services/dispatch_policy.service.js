@@ -28,6 +28,7 @@ class Policy {
       snapshot?.providerId,
       snapshot?.targetProviderId,
       snapshot?.dropoffShopId,
+      snapshot?.candidateShopId,
       data.providerId,
       data.dropoffShopId,
       data.directProviderId,

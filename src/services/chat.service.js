@@ -30,6 +30,7 @@ class ChatService {
    if(provider&&provider.userId!==locked.userId)await Participant.create({roomId:room.id,userId:provider.userId,role:'PROVIDER'},{transaction});
   }else if(TERMINAL.includes(String(locked.status))&&!room.isArchived)await room.update({isArchived:true},{transaction});
   if(locked.constructor.rawAttributes.chatVersion&&locked.chatVersion!==version)await locked.update({chatVersion:version},{transaction});
+  ticket.setDataValue("chatVersion", version);
   return room;
  }
  static async room(actor, scope, referenceId, transaction, { version, history=false }={}) {

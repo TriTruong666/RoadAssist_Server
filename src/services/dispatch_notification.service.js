@@ -33,9 +33,19 @@ class Notifications {
       vehicleType: ticket.vehicleSnapshot.type,
       requiredCapabilities: ticket.requirements.requiredCapabilities,
       createdAt: ticket.createdAt,
+      queueExpiresAt: ticket.queueExpiresAt,
+      arrivalDueAt: ticket.arrivalDueAt,
+      intakeReservationId: ticket.intakeReservationId,
+      candidateIntakeReservationId: ticket.candidateIntakeReservationId,
     };
   }
   static async candidates(ticket, transaction) {
+    if (
+      ticket.handoffKind !== "TOW_DELIVERY" &&
+      ticket.queueExpiresAt &&
+      ticket.queueExpiresAt <= new Date()
+    )
+      return [];
     const distance = distanceSql(ticket.pickupLatitude, ticket.pickupLongitude);
     const rows = await Provider.findAll({
       where: {
@@ -81,6 +91,12 @@ class Notifications {
         transaction,
       });
       if (target) recipients.add(target.userId);
+    }
+    if (ticket.candidateShopId) {
+      const candidate = await Provider.findByPk(ticket.candidateShopId, {
+        transaction,
+      });
+      if (candidate) recipients.add(candidate.userId);
     }
     if (ticket.dropoffShopId) {
       const shop = await Provider.findByPk(ticket.dropoffShopId, {
@@ -144,6 +160,10 @@ class Notifications {
           (ticket.targetProviderId &&
             !!(await Provider.findOne({
               where: { id: ticket.targetProviderId, userId: row.recipientId },
+            }))) ||
+          (ticket.candidateShopId &&
+            !!(await Provider.findOne({
+              where: { id: ticket.candidateShopId, userId: row.recipientId },
             }))) ||
           (ticket.dropoffShopId &&
             !!(await Provider.findOne({
