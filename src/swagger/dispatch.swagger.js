@@ -292,7 +292,7 @@ const actions = [
     "approve-quote",
     "Rider approves only after server-side payment verification",
   ],
-  ["start", "Rider starts funded tow and freezes waiting fees"],
+  ["start", "Rider starts funded tow with accepted shop reservation and freezes waiting fees"],
   ["ready", "Assigned repair provider marks ready for rider acceptance"],
   ["resolve", "Rider resolves; tow to shop atomically spawns linked WALK_IN"],
   [

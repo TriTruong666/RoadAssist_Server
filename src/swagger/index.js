@@ -5,6 +5,8 @@ const providers = require("./provider.swagger");
 const placesFlags = require("./places_flags.swagger");
 const chatUploads = require("./chat_upload.swagger");
 const dispatch = require("./dispatch.swagger");
+const custodyDisputes = require("./custody_dispute.swagger");
+const operations = require("./operations.swagger");
 const billing = require("./billing.swagger");
 module.exports = swaggerJSDoc({
   definition: {
@@ -23,6 +25,8 @@ module.exports = swaggerJSDoc({
         ...chatUploads.schemas,
         ...dispatch.schemas,
         ...billing.schemas,
+        ...operations.schemas,
+        ...custodyDisputes.schemas,
       },
       securitySchemes: {
         sepayApiKey: { type: "apiKey", in: "header", name: "Authorization" },
@@ -56,6 +60,8 @@ module.exports = swaggerJSDoc({
       ...chatUploads.paths,
       ...dispatch.paths,
       ...billing.paths,
+      ...operations.paths,
+      ...custodyDisputes.paths,
       "/health": {
         get: {
           summary: "Check PostgreSQL and Redis readiness",
