@@ -8,7 +8,7 @@ function fields(update = false) {
     required(body('brand')).isString().bail().trim().isLength({ min: 1, max: 50 }),
     required(body('modelName')).isString().bail().trim().isLength({ min: 1, max: 50 }),
     body('color').optional({ nullable: true }).isString().bail().trim().isLength({ max: 30 }),
-    dimensions('baseWidth', 0.3, 3), dimensions('baseHeight', 0.5, 3),
+    dimensions('length', 0.5, 20), dimensions('weightKg', 20, 50000), dimensions('baseWidth', 0.3, 3), dimensions('baseHeight', 0.5, 3),
     ...(update ? [body('isActive').optional().isBoolean({ strict: true }), body('rideConfig').optional().isObject({ strict: true }),
       body('rideConfig.mode').optional().isIn(RIDE_MODES),
       body('rideConfig.width').optional().isFloat({ gt: 0 }).bail().custom(value => Number.isFinite(Number(value))).bail().customSanitizer(Number),

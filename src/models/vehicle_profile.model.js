@@ -28,6 +28,8 @@ module.exports = sequelize.define(
       allowNull: false,
       field: "model_name",
     },
+    length: { type: DataTypes.FLOAT, validate: { min: 0.5, max: 20 } },
+    weightKg: { type: DataTypes.FLOAT, field: 'weight_kg', validate: { min: 20, max: 50000 } },
     color: { type: DataTypes.STRING(30) },
     baseWidth: {
       type: DataTypes.FLOAT,
