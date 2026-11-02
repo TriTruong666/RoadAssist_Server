@@ -97,6 +97,16 @@ module.exports = {
     valhallaRouterUrl:
       process.env.VALHALLA_ROUTER_URL || "http://valhalla:8002/route",
   },
+  s3: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    region: process.env.AWS_REGION || 'ap-southeast-1',
+    bucketName: process.env.AWS_S3_BUCKET_NAME || 'picare-s3',
+    endpoint: process.env.AWS_S3_ENDPOINT || undefined,
+    publicBaseUrl: process.env.S3_PUBLIC_BASE_URL || '',
+    folder: 'roadassist', visibility: 'public',
+    uploadTimeoutMs: integer('S3_UPLOAD_TIMEOUT_MS', 60000),
+  },
   socket: {
     pingTimeout: integer("SOCKET_PING_TIMEOUT", 60000),
     pingInterval: integer("SOCKET_PING_INTERVAL", 25000),
