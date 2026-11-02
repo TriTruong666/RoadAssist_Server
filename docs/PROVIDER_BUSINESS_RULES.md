@@ -47,15 +47,15 @@ Owner upload uses multipart `POST /providers/:id/documents`, fields `documentTyp
 | MOBILE_SHOP | LICENSE_PHOTO and VEHICLE_PHOTO |
 | TOW | LICENSE_PHOTO and VEHICLE_PHOTO, plus licenseNumber |
 
-Files must have matching JPEG/PNG/WebP MIME and signatures, maximum 5MB. Data is private PostgreSQL bytea. Metadata JSON never includes the bytes. Limits: 10 active/50 total/100MB per profile, 200 total/200MB per owner; withdrawn history counts toward storage limits. Retrying an identical current image returns the existing document without creating another revision/audit entry.
+Files must have matching JPEG/PNG/WebP MIME and signatures, maximum 5MB. Files upload directly to public S3 in `picare-s3/roadassist/`; metadata APIs remain owner/admin only and include direct URLs. Metadata JSON never includes bytes. Limits: 10 active/50 total/100MB per profile, 200 total/200MB per owner; withdrawn history counts toward storage limits. Retrying an identical current image returns the existing document without creating another revision/audit entry.
 
 Each document has a SHA-256 content hash and identity fingerprint. License images bind to licenseNumber; vehicle images bind to linked vehicle, plate, type, dimensions, brand/model; business documents bind to name/address. Old identity evidence cannot approve a changed identity. `currentForProfile` tells the owner which files need replacing. Identical bytes previously tied to another identity on that profile are rejected as stale; actual authenticity is assessed by the reviewing admin.
 
 Endpoints:
 
 - GET `/providers/:id/documents`: private metadata/history for owner/admin.
-- GET `/providers/:id/documents/:documentId/content`: private image download, no-store/nosniff; withdrawn evidence remains readable for review traceability.
-- DELETE `/providers/:id/documents/:documentId`: owner withdrawal from future approvals; bytes/history are retained privately.
+- GET `/providers/:id/documents/:documentId/content`: authorized redirect to the public S3 URL; legacy database bytes remain readable during migration. Withdrawn evidence remains available for review traceability.
+- DELETE `/providers/:id/documents/:documentId`: owner withdrawal from future approvals; files/history are retained; S3 file URLs use the public storage policy.
 - GET `/providers/:id/audit?page=1&limit=50`: private append-only review/change history.
 
 Adding/withdrawing evidence on an active profile moves it to PENDING and disables duty. Busy units cannot change evidence or identity. Admin approval requires a nonempty reason, current matching evidence, a valid vehicle/license and complete capabilities. It stores reviewedRevision and an immutable snapshot of identity, vehicle, capabilities and document IDs/hashes. Subsequent identity changes increment profileRevision and require review again. Capacity-only changes do not invalidate identity approval.
@@ -77,3 +77,5 @@ Clients send Geolocation accuracy in meters. A GOOD fix must be within PROVIDER_
 Every valid chronological sample is retained privately with its quality and whether the provider could accept work at that moment. Only GOOD samples update trusted coordinates/time. Poor/jumping fixes preserve the trusted point but immediately remove public discovery; returning to a credible fix restores eligibility. Freshness uses server receive time for the trusted fix, not a client-provided future timestamp.
 
 Turning duty off or administrative suspension stops new work. An already assigned, nonterminal rescue may continue private GPS while the provider is off-duty/suspended; those points never publish GEO or restore operational permission. Once that job ends, off-duty/suspended heartbeat submission is rejected. Phase 5 must authorize ongoing-trip location access through the ticket, independently of public discovery.
+
+S3 configuration, public URL policy and byte migration: [CHAT_AND_STORAGE.md](CHAT_AND_STORAGE.md).

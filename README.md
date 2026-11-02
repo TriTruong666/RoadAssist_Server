@@ -1,6 +1,6 @@
 # RoadAssist Server
 
-Standalone Express API using PostgreSQL/Sequelize and Redis. Phases 1–3 provide Auth/User/Vehicle and Provider/Duty APIs, PostgreSQL GPS history, Redis GEO discovery, centralized errors, Swagger and readiness checks. Dispatch, payments and other business queues follow in later phases. No Firebase or Core Hub connection is used.
+Standalone Express API using PostgreSQL/Sequelize and Redis. Phases 1–4 provide Auth/User/Vehicle, Provider/Duty, saved places/routes, community hazards and scene chat, PostgreSQL GPS history, Redis GEO discovery, centralized errors, Swagger and readiness checks. Dispatch, payments and other business queues follow in later phases. No Firebase or Core Hub connection is used.
 
 ## Local development
 
@@ -18,7 +18,9 @@ Existing `.env.development` files can be kept. Defaults are HTTP `9898`, Postgre
 - `GET /health`: HTTP 200 when PostgreSQL and Redis are reachable; HTTP 503 otherwise.
 - `/api/v1/auth`, `/api/v1/users`, `/api/v1/vehicles`: Phase 2 feature routers; see Swagger for all 19 operations.
 - `/api/v1/providers`, `/api/v1/admin/providers`: Phase 3 provider registration, review, duty and discovery (19 operations, including availability/evidence/audit).
-- `/api-docs`: Swagger, localhost only unless `SWAGGER_PUBLIC=true`.
+- `/api/v1/flags`, `/api/v1/admin/flags`, `/api/v1/places`: Phase 4 hazards, voting, TTL, image evidence, scene chat and map integration. See [Places and hazards](docs/PLACES_AND_HAZARDS.md).
+- `/api/v1/chat`, `/api/v1/uploads`: unified versioned dispatch/hazard chat and direct public S3 images. See [Chat and storage](docs/CHAT_AND_STORAGE.md).
+- `/api-docs`: Swagger (modules in `src/swagger/`), localhost only unless `SWAGGER_PUBLIC=true`.
 - `npm test`: HTTP validation, authentication guards, response/error, CORS, body limits and readiness tests without external services.
 - `npm run test:integration`: actual PostgreSQL/Redis integration tests. Each integration file creates and removes its own PostgreSQL schema and Redis namespaces; SMTP is stubbed. Run `RUN_DB_TESTS=1 npm test` for the complete suite.
 
@@ -26,11 +28,11 @@ JSON and URL-encoded request bodies support up to 10 MB. Error descriptors conta
 
 ## Database and services
 
-Startup synchronizes registered RoadAssist models with `alter: true` and runs RoadAssist-only migrations. Registered models are User, AuthSession, PendingRegistration, VehicleProfile, VehicleRideConfig, Provider, ProviderLocationHistory, ProviderDocument and ProviderAuditLog. Legacy database tables are not removed by cleanup of source files.
+Startup synchronizes registered RoadAssist models with `alter: true` and runs RoadAssist-only migrations. Registered models are User, AuthSession, PendingRegistration, VehicleProfile, VehicleRideConfig, Provider, ProviderLocationHistory, ProviderDocument, ProviderAuditLog, HazardFlag, HazardVote, HazardImage, HazardMessage, SavedPlace and SavedRoute. Legacy database tables are not removed by cleanup of source files.
 
 `DB_FORCE_RESET=true` explicitly recreates registered model tables and clears the selected Redis database. Keep it false for normal startup. Legacy partial reset (`DB_RESET=true`) is rejected; enabling both reset flags is rejected as well. Shutdown closes HTTP, Redis and PostgreSQL connections.
 
-SMTP, JWT, SePay, maps and Socket.io settings are listed in `.env.example`. SMTP is used for login OTP and password reset in Phase 2. SePay, maps and realtime business integrations follow later. SMTP transport creation does not send mail. Node.js provides `crypto` as a built-in module.
+SMTP, JWT, SePay, maps and Socket.io settings are listed in `.env.example`. SMTP verifies registration email and password resets; password login has no IP-based OTP. MapTiler searches places, Valhalla computes routes avoiding confirmed hazards, and Socket.IO handles scene chat. SePay follows in a later phase. SMTP transport creation does not send mail. Node.js provides `crypto` as a built-in module.
 
 ## Container and deployment
 

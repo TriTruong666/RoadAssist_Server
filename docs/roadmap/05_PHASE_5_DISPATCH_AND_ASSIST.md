@@ -320,3 +320,7 @@ Trước khi tạo bất kỳ phiếu cứu hộ mới nào (`WALK_IN`, `SOS`, `
 ### Điều kiện gán cuốc sau nâng cấp Provider
 
 Phase 5 phải gọi ProviderAvailabilityService.lockForAssignment(providerId, requirements, transaction) trong CÙNG transaction với ghi providerId/trạng thái ticket. Requirements phải lấy từ loại yêu cầu và hồ sơ xe phía server, không tin filter search từ client. Helper khóa owner → vehicle → provider, kiểm tra quyền hoạt động/revision, năng lực, GPS, số chỗ và xung đột chung xe MOBILE_SHOP/TOW. Khi hoàn tất/hủy/chuyển giao ticket, gọi afterDispatchChange(profile, transaction) để đồng bộ lại GEO sau commit. SHOP có thể nhận nhiều cuốc trong số chỗ khai báo; mobile một xe chỉ có một cuốc. GPS của cuốc hiện hành lấy từ lịch sử riêng tư, không dựa vào endpoint public discovery khi đối tác tắt ca hoặc bị đình chỉ.
+
+### Tích hợp chat phiên bản có sẵn
+
+Trong cùng transaction tạo/gán/chuyển/hủy/kết thúc ticket, sau khi đổi providerId/status, gọi ChatService.synchronizeDispatch(ticket, transaction). Helper lưu snapshot thành viên, tăng chatVersion khi đổi đối tác và lưu trữ phòng cũ. Không cung cấp API cho client tự chọn version/members. Đọc [CHAT_AND_STORAGE.md](../CHAT_AND_STORAGE.md) trước khi triển khai các mutation điều phối.

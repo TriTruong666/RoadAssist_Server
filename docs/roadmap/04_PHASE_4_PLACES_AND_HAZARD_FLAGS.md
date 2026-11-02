@@ -191,3 +191,9 @@ stateDiagram-v2
   feat(consensus): implement 3-vote consensus engine, ttl auto-expiry cron job and admin flag lock apis
   ```
 
+
+## Trạng thái triển khai
+
+Đã triển khai models, API địa điểm/lộ trình riêng tư, tìm kiếm MapTiler, định tuyến Valhalla né vùng đã xác nhận, cảnh báo kèm ảnh WebP ≤800 KiB, vote đồng thuận an toàn khi đồng thời, điểm uy tín một lần, TTL cron và quyền admin khóa/mở khóa/gỡ. Chat hiện trường dùng Socket.IO xác thực cookie và lịch sử PostgreSQL.
+
+Hợp đồng đầy đủ và giới hạn vận hành: [PLACES_AND_HAZARDS.md](../PLACES_AND_HAZARDS.md). Kế hoạch chia commit phía trên là tham khảo; lịch sử triển khai được chia theo yêu cầu của người dùng.
