@@ -7,7 +7,7 @@ const Audit = require('./provider_audit.service');
 const { DOCUMENT_TYPES } = require('../common/provider.constants');
 const { BadRequestException, ForbiddenException, NotFoundException, ConflictException } = require('../common/exceptions/BaseException');
 const errors = require('../common/exceptions/error_codes');
-const META = ['id', 'providerId', 'documentType', 'mimeType', 'originalName', 'size', 'sha256', 'subjectFingerprint', 'withdrawnAt', 'createdAt'];
+const META = ['id', 'providerId', 'documentType', 'mimeType', 'originalName', 'size', 'sha256', 'subjectFingerprint', 'withdrawnAt', 'createdAt', 'url', 's3Key'];
 function detectMime(buffer) {
   if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png';
   if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) return 'image/jpeg';
@@ -52,7 +52,7 @@ class ProviderDocumentService {
     if (!file || !DOCUMENT_TYPES.includes(documentType)) throw new BadRequestException('Cần ảnh và loại giấy tờ hợp lệ');
     const mimeType = detectMime(file.buffer);
     if (!mimeType || mimeType !== file.mimetype || file.size > 5 * 1024 * 1024) throw new BadRequestException('Chỉ nhận ảnh JPEG, PNG hoặc WebP tối đa 5MB');
-    return ProviderService.mutate(actor, id, async ({ profile, vehicle, transaction }) => {
+    return require('./s3.service').withUploads(keys => ProviderService.mutate(actor, id, async ({ profile, vehicle, transaction }) => {
       if (profile.userId !== actor.userId) throw new ForbiddenException();
       if (profile.status === 'REVOKED') throw new ConflictException(errors.PROVIDER_INVALID_TRANSITION);
       await ProviderService.assertIdle(profile, vehicle, transaction);
@@ -71,12 +71,13 @@ class ProviderDocumentService {
       const size = Number(await Document.sum('size', { where: { providerId: id }, transaction }) || 0);
       if (total >= 50 || active >= 10 || size + file.size > 100 * 1024 * 1024) throw new ConflictException(errors.PROVIDER_DOCUMENT_QUOTA_EXCEEDED);
       const before = await Audit.snapshot(profile.get(), transaction);
+      const uploaded = await require('./s3.service').upload({ body:file.buffer, mimeType, originalName:path.basename(file.originalname), userId:actor.userId, transaction, attachedTo:`provider:${id}`, keys });
       const document = await Document.create({ providerId: id, documentType, mimeType, originalName: path.basename(file.originalname).replace(/[\x00-\x1f\x7f]/g, '').slice(0, 120) || 'document',
-        subjectFingerprint, size: file.size, sha256, content: file.buffer }, { transaction });
+        subjectFingerprint, size: file.size, sha256, s3Key:uploaded.key, url:uploaded.url }, { transaction });
       await profile.update({ profileRevision: profile.profileRevision + 1, ...(profile.status === 'ACTIVE' ? { status: 'PENDING', requiresApproval: true, accepting: false } : {}) },
         { transaction, auditAction: 'DOCUMENT_UPLOADED', auditBefore: before });
       return { document: Object.fromEntries(META.map(field => [field, document.get(field)])), provider: profile.toJSON() };
-    }, context);
+    }, context));
   }
   static async withdraw(actor, id, documentId, context) {
     return ProviderService.mutate(actor, id, async ({ profile, vehicle, transaction }) => {

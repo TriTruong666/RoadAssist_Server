@@ -13,6 +13,7 @@ module.exports = {
   list: async (req, res) => Response.success(res, await Service.list(req.user, req.validated.id)),
   async content(req, res) {
     const document = await Service.content(req.user, req.validated.id, req.validated.documentId);
+    if (document.url) return res.redirect(302, document.url);
     res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
     res.attachment(document.originalName).type(document.mimeType).send(document.content);
   },
