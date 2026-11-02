@@ -14,7 +14,9 @@ class ProviderAvailabilityService {
     const providers = q.quoteTable(sequelize.models.Provider.getTableName());
     const field = name => q.quoteIdentifier(Ticket.rawAttributes[name]?.field || name);
     const terminal = TERMINAL_DISPATCH_STATUSES.map(value => sequelize.escape(value)).join(',');
-    return `(SELECT COUNT(*)::integer FROM ${table} AS job WHERE job.${field('status')} NOT IN (${terminal}) AND (job.${field('providerId')} = "Provider"."id" OR ("Provider"."kind" != 'SHOP' AND (job.${field('vehicleProfileId')} = "Provider"."vehicle_profile_id" OR job.${field('providerId')} IN (SELECT linked.id FROM ${providers} AS linked WHERE linked.vehicle_profile_id = "Provider"."vehicle_profile_id")))))`;
+    const reservation = sequelize.models.ShopIntakeReservation;
+    const booked = reservation ? `CASE WHEN "Provider"."kind" = 'SHOP' THEN (SELECT COUNT(*) FROM ${q.quoteTable(reservation.getTableName())} AS booking WHERE booking.shop_id = "Provider"."id" AND (booking.status IN ('IN_TRANSIT','DELIVERED') OR (booking.status = 'ACCEPTED' AND booking.hold_until > NOW()))) ELSE 0 END` : '0';
+    return `(${booked} + (SELECT COUNT(*)::integer FROM ${table} AS job WHERE job.${field('status')} NOT IN (${terminal}) AND (job.${field('providerId')} = "Provider"."id" OR ("Provider"."kind" != 'SHOP' AND (job.${field('vehicleProfileId')} = "Provider"."vehicle_profile_id" OR job.${field('providerId')} IN (SELECT linked.id FROM ${providers} AS linked WHERE linked.vehicle_profile_id = "Provider"."vehicle_profile_id"))))))`;
   }
   static async activeJobs(profile, transaction) {
     const Ticket = sequelize.models.DispatchTicket;
@@ -24,7 +26,10 @@ class ProviderAvailabilityService {
       const linked = await sequelize.models.Provider.findAll({ attributes: ['id'], where: { vehicleProfileId: profile.vehicleProfileId }, transaction });
       alternatives.push({ vehicleProfileId: profile.vehicleProfileId }, { providerId: { [Op.in]: linked.map(row => row.id) } });
     }
-    return Ticket.count({ where: { status: { [Op.notIn]: TERMINAL_DISPATCH_STATUSES }, [Op.or]: alternatives }, transaction });
+    const jobs = await Ticket.count({ where: { status: { [Op.notIn]: TERMINAL_DISPATCH_STATUSES }, [Op.or]: alternatives }, transaction });
+    const Reservation=sequelize.models.ShopIntakeReservation;
+    const reservations=profile.kind==='SHOP'&&Reservation ? await Reservation.count({where:{shopId:profile.id,[Op.or]:[{status:{[Op.in]:['IN_TRANSIT','DELIVERED']}},{status:'ACCEPTED',holdUntil:{[Op.gt]:new Date()}}]},transaction}) : 0;
+    return jobs+reservations;
   }
   static async describe(profile, transaction, validated = false) {
     const { User, VehicleProfile } = sequelize.models;
@@ -54,7 +59,7 @@ class ProviderAvailabilityService {
     });
   }
   // Must remain in the SAME transaction as the caller's ticket assignment. No public reservation endpoint.
-  static async lockForAssignment(providerId, requirements, transaction) {
+  static async lockForAssignment(providerId, requirements, transaction, { honorReservation = false } = {}) {
     if (!transaction) throw new Error('Dispatch assignment requires a caller-owned transaction');
     const { Provider, User, VehicleProfile } = sequelize.models;
     const snapshot = await Provider.findByPk(providerId, { transaction });
@@ -65,6 +70,7 @@ class ProviderAvailabilityService {
     const profile = await Provider.findByPk(providerId, { transaction, lock: transaction.LOCK.UPDATE });
     if (!profile) throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
     const availability = await this.describe(profile, transaction);
+    if (honorReservation && profile.kind === 'SHOP' && availability.reason === 'OFF_DUTY' && availability.activeJobs < availability.maxConcurrentJobs) availability.available = true;
     if (!availability.available) throw new ConflictException(availability.reason === 'BUSY' ? errors.PROVIDER_CAPACITY_EXHAUSTED : errors.PROVIDER_NOT_AVAILABLE, availability);
     if (!Capabilities.matches(profile, requirements)) throw new ConflictException(errors.PROVIDER_CAPABILITY_MISMATCH);
     this.afterDispatchChange(profile, transaction);

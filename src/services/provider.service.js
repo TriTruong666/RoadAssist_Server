@@ -46,7 +46,7 @@ class ProviderService {
   }
   static async assertIdle(profile, vehicle, transaction) {
     if (vehicle) return VehiclePolicy.assertNotBusy(vehicle, [profile], transaction);
-    if (await this.openDispatch(profile, transaction)) throw new ConflictException(errors.PROVIDER_BUSY);
+    if (await Availability.activeJobs(profile, transaction) > 0) throw new ConflictException(errors.PROVIDER_BUSY);
   }
   static validVehicleCondition() {
     const table = sequelize.getQueryInterface().queryGenerator.quoteTable(VehicleProfile.getTableName());
@@ -155,6 +155,7 @@ class ProviderService {
     const quality = Gps.classify(profile, data, recordedAt, now, require('../config/app.config').providers);
     await profile.update({ ...(quality === 'GOOD' ? { latitude: data.latitude, longitude: data.longitude, lastTrustedLocationAt: now, lastTrustedRecordedAt: recordedAt } : {}), locationQuality: quality, lastAccuracy: data.accuracy ?? null, lastHeartbeatAt: now, lastLocationRecordedAt: recordedAt, accepting }, { transaction, auditAction: !profile.accepting && accepting ? 'DUTY_STARTED' : undefined });
     const availability = await Availability.describe(profile, transaction);
+    await require('./dispatch_liveness.service').recordProgress(profile, transaction);
     await ProviderLocationHistory.create({ providerId: profile.id, latitude: data.latitude, longitude: data.longitude, recordedAt, ...pick(data, ['speed', 'accuracy']), quality, usableForDispatch: availability.available }, { transaction });
     return availability;
   }
