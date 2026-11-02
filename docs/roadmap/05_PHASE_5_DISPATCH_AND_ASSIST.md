@@ -324,3 +324,9 @@ Phase 5 phải gọi ProviderAvailabilityService.lockForAssignment(providerId, r
 ### Tích hợp chat phiên bản có sẵn
 
 Trong cùng transaction tạo/gán/chuyển/hủy/kết thúc ticket, sau khi đổi providerId/status, gọi ChatService.synchronizeDispatch(ticket, transaction). Helper lưu snapshot thành viên, tăng chatVersion khi đổi đối tác và lưu trữ phòng cũ. Không cung cấp API cho client tự chọn version/members. Đọc [CHAT_AND_STORAGE.md](../CHAT_AND_STORAGE.md) trước khi triển khai các mutation điều phối.
+
+## Trạng thái triển khai Phase 5
+
+Đã triển khai 15 trạng thái, 3 luồng WALK_IN/SOS/TOW, cấp phát an toàn theo owner → vehicle → provider → ticket, unique index xe bận, báo giá duy nhất, cổng thanh toán fail-closed, GPS chất lượng/mới, phí chờ chính xác, tái điều phối/chặn tài xế cũ theo cả tài khoản, chat phiên bản, handoff/return tow, estimate/retarget và sinh phiếu tại tiệm khi giao xe. Thông báo dùng outbox PostgreSQL + Socket.IO, có lịch sử phục hồi.
+
+Hợp đồng chi tiết, cấu hình phí và các quyết định nghiệp vụ: [DISPATCH_BUSINESS_RULES.md](../DISPATCH_BUSINESS_RULES.md). Bill/SePay/refund/payout thật vẫn thuộc Phase 6; hiện tại không cho client tự khai đã thanh toán để vượt cổng duyệt giá.
