@@ -1,0 +1,61 @@
+const axios = require('axios');
+const sequelize = require('../config/postgres.config');
+const { SavedPlace, SavedRoute, User, HazardFlag } = require('../models');
+const { Op } = require('sequelize');
+const config = require('../config/app.config');
+const { BaseException, NotFoundException, ConflictException } = require('../common/exceptions/BaseException');
+const upstream = () => new BaseException({ code: 'MAP_SERVICE_UNAVAILABLE', message: 'Dịch vụ bản đồ hiện không khả dụng', statusCode: 503 });
+function ring(flag) {
+ const result = [];
+ for (let i = 0; i <= 16; i++) {
+  const angle = 2 * Math.PI * (i % 16) / 16;
+  const lat = flag.latitude * Math.PI / 180, lon = flag.longitude * Math.PI / 180, d = flag.radiusMeters / 6371000;
+  const y = Math.asin(Math.sin(lat) * Math.cos(d) + Math.cos(lat) * Math.sin(d) * Math.cos(angle));
+  const x = lon + Math.atan2(Math.sin(angle) * Math.sin(d) * Math.cos(lat), Math.cos(d) - Math.sin(lat) * Math.sin(y));
+  result.push([((x * 180 / Math.PI + 540) % 360) - 180, y * 180 / Math.PI]);
+ }
+ return result;
+}
+class PlaceService {
+ static model(routes) { return routes ? SavedRoute : SavedPlace; }
+ static async list(actor, routes, { limit = 50, offset = 0 }) {
+  const result = await this.model(routes).findAndCountAll({ where: { userId: actor.userId }, limit, offset, order: [['createdAt','DESC'], ['id','DESC']], attributes: { exclude: ['userId'] } });
+  return { total: result.count, items: result.rows };
+ }
+ static async create(actor, routes, data) {
+  return sequelize.transaction(async transaction => {
+   await User.findOne({ where: { userId: actor.userId }, transaction, lock: transaction.LOCK.UPDATE });
+   const Model = this.model(routes);
+   if (await Model.count({ where: { userId: actor.userId }, transaction }) >= 100) throw new ConflictException('Tối đa 100 mục đã lưu');
+   if (routes) data = { ...data, stops: data.stops.map(p => ({ latitude: p.latitude, longitude: p.longitude })), geometry: { type: 'LineString', coordinates: data.geometry.coordinates } };
+   const item = await Model.create({ ...data, userId: actor.userId }, { transaction });
+   const result = item.toJSON(); delete result.userId; return result;
+  });
+ }
+ static async remove(actor, routes, id) {
+  if (!await this.model(routes).destroy({ where: { id, userId: actor.userId } })) throw new NotFoundException();
+  return { deleted: true };
+ }
+ static async search({ q }) {
+  if (!config.maps.maptilerApiKey) throw upstream();
+  try {
+   const { data } = await axios.get(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json`, { params: { key: config.maps.maptilerApiKey, limit: 10 }, timeout: 8000, maxContentLength: 2 * 1024 * 1024 });
+   if (!Array.isArray(data.features)) throw upstream();
+   return { items: data.features.map(f => ({ id: f.id, name: f.text, address: f.place_name, center: f.center })) };
+  } catch { throw upstream(); }
+ }
+ static async solve({ stops, costing = 'auto' }) {
+  const flags = await HazardFlag.findAll({ where: { status: { [Op.in]: ['2','3'] }, expiresAt: { [Op.gt]: new Date() } }, order: [['id','ASC']], limit: 101 });
+  // Refuse rather than silently omit known danger areas when the upstream polygon budget is exceeded.
+  if (flags.length > 100) throw new ConflictException('Quá nhiều vùng cảnh báo để định tuyến an toàn');
+  const payload = { locations: stops.map(p => ({ lat: p.latitude, lon: p.longitude })), costing, shape_format: 'geojson', exclude_polygons: flags.map(ring) };
+  try {
+   const { data } = await axios.post(config.maps.valhallaRouterUrl, payload, { timeout: 10000, maxContentLength: 8 * 1024 * 1024 });
+   const legs = data.trip?.legs;
+   if (!Array.isArray(legs) || !legs.length || !legs.every(leg => require('../schemas/place_flag.schema').geometry(leg.shape))) throw upstream();
+   return { geometry: { type: 'LineString', coordinates: legs.flatMap((leg, index) => index ? leg.shape.coordinates.slice(1) : leg.shape.coordinates) }, summary: data.trip.summary, avoidedFlagIds: flags.map(f => f.id), calculatedAt: new Date() };
+  } catch { throw upstream(); }
+ }
+}
+PlaceService.ring = ring;
+module.exports = PlaceService;
