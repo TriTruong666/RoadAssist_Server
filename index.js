@@ -16,7 +16,8 @@ let hazardIO;
 app.set("trust proxy", config.app.trustProxy);
 app.use(require("morgan")("dev"));
 app.use(require("cors")({ origin: config.cors, credentials: true }));
-app.use(express.json({ limit: "10mb" }));
+app.use('/api/v1/payments/sepay/webhook', express.json({limit:'64kb',verify(req,res,buffer){req.rawBody=Buffer.from(buffer);}}));
+app.use(express.json({limit:'10mb'}));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(require("cookie-parser")());
 app.use(require("./src/middlewares/cookie_origin.middleware"));
@@ -59,6 +60,8 @@ async function startServer() {
       );
     require("./src/services/jwt.service").assertConfigured();
     require("./src/utils/auth_cookie.util").assertCookieConfig();
+    require('./src/services/dispatch_policy.service').pricing();
+    require('./src/services/sepay.service').assertConfig();
     await sequelize.authenticate();
     await redis.connect();
     await redis.ping();
