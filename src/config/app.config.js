@@ -101,6 +101,14 @@ module.exports = {
     accountNumber: process.env.SEPAY_ACCOUNT_NUMBER || null,
     bankCode: process.env.SEPAY_BANK_CODE || null,
     webhookToken: process.env.SEPAY_WEBHOOK_TOKEN || null,
+    webhookAuth: process.env.SEPAY_WEBHOOK_AUTH || 'apikey',
+    webhookSecret: process.env.SEPAY_WEBHOOK_SECRET || '',
+    accountName: process.env.SEPAY_ACCOUNT_NAME || '',
+    gatewayName: process.env.SEPAY_GATEWAY_NAME || process.env.SEPAY_BANK_CODE || '',
+    subAccount: process.env.SEPAY_SUB_ACCOUNT || '',
+    transferPrefix: process.env.SEPAY_TRANSFER_PREFIX || '',
+    holdDays: Number(process.env.PAYOUT_HOLD_DAYS ?? 7),
+    paymentTtlMinutes: Number(process.env.PAYMENT_TTL_MINUTES ?? 15),
     commissionRate: Number(process.env.PLATFORM_COMMISSION_RATE ?? 0.1),
   },
   maps: {
@@ -108,6 +116,13 @@ module.exports = {
     maptilerApiKey: process.env.MAPTILER_API_KEY || null,
     valhallaRouterUrl:
       process.env.VALHALLA_ROUTER_URL || "http://valhalla:8002/route",
+  },
+  dispatch: {
+    sosCallOutFee: process.env.DISPATCH_SOS_CALLOUT_FEE || '30000',
+    sosPerKm: process.env.DISPATCH_SOS_PER_KM || '5000',
+    towBaseFee: process.env.DISPATCH_TOW_BASE_FEE || '150000',
+    towPerKm: process.env.DISPATCH_TOW_PER_KM || '10000',
+    waitingPerMinute: process.env.DISPATCH_WAITING_PER_MINUTE || '2000',
   },
   s3: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
