@@ -3,8 +3,10 @@ const db = require('../config/postgres.config');
 const { ChatRoom:Room, ChatMessage:Message, ChatParticipant:Participant, HazardFlag:Flag, Provider, User, S3Asset } = require('../models');
 const { BaseException, BadRequestException, NotFoundException, ForbiddenException, ConflictException } = require('../common/exceptions/BaseException');
 const Storage = require('./s3.service');
-const TERMINAL = ['4','5','8','12','15'];
+const retry = require('../utils/transaction_retry.util');
+const { TERMINAL } = require('../common/dispatch.constants');
 class ChatService {
+ static transaction(work){return retry(()=>db.transaction(work));}
  static async reference(scope, referenceId, transaction) {
   const Model=scope==='HAZARD'?Flag:db.models.DispatchTicket;
   if(!Model)throw new BaseException({code:'DISPATCH_NOT_AVAILABLE',message:'Phân hệ điều phối chưa được triển khai',statusCode:503});
@@ -53,7 +55,7 @@ class ChatService {
   return {id:message.id,roomId:message.roomId,senderRole:message.senderRole,authorName:message.User?.name|| (message.senderRole==='SYSTEM'?'Hệ thống':'Người dùng'),content:message.content,images:message.images,systemEvent:message.systemEvent,createdAt:message.createdAt,clientMessageId:message.clientMessageId};
  }
  static async list(actor,scope,referenceId,{limit=50,before,version,offset=0}={}) {
-  return db.transaction(async transaction=>{
+  return this.transaction(async transaction=>{
    const {room}=await this.room(actor,scope,referenceId,transaction,{version});
    const where={roomId:room.id};
    if(before){const cursor=await Message.findOne({where:{id:before,roomId:room.id},transaction});if(!cursor)throw new BadRequestException('Cursor không thuộc phòng chat');where[Op.or]=[{createdAt:{[Op.lt]:cursor.createdAt}},{createdAt:cursor.createdAt,id:{[Op.lt]:cursor.id}}];}
@@ -63,7 +65,7 @@ class ChatService {
   });
  }
  static async history(actor,scope,referenceId,{limit=50,offset=0}={}) {
-  return db.transaction(async transaction=>{
+  return this.transaction(async transaction=>{
    const ref=await this.reference(scope,referenceId,transaction);
    // Membership snapshot is the source of truth, including rider's old rooms.
    if(scope==='DISPATCH'){
@@ -82,7 +84,7 @@ class ChatService {
   if(text.length>1000||(!text&&!files.length&&!data.assetIds?.length))throw new BadRequestException('Cần nội dung 1–1000 ký tự hoặc ảnh');
   const compressed=await require('../middlewares/upload.middleware').compress(files);
   if(compressed.length+(data.assetIds?.length||0)>3)throw new BadRequestException('Tối đa 3 ảnh');
-  return Storage.withUploads(keys=>db.transaction(async transaction=>{
+  return retry(()=>Storage.withUploads(keys=>db.transaction(async transaction=>{
    await User.findOne({where:{userId:actor.userId},transaction,lock:transaction.LOCK.UPDATE});
    const {room,ref}=await this.room(actor,scope,referenceId,transaction);
    if((data.expectedRoomId||data.roomId)&&(data.expectedRoomId||data.roomId)!==room.id)throw new ConflictException('Phiên chat đã thay đổi, hãy tham gia phòng mới');
@@ -101,7 +103,7 @@ class ChatService {
    const message=await Message.create({id,roomId:room.id,senderId:actor.userId,senderRole:member?.role||'COMMUNITY',content:text||null,images,clientMessageId:data.clientMessageId||null},{transaction});
    const user=await User.findOne({where:{userId:actor.userId},attributes:['name'],transaction});message.User=user;
    return this.dto(message);
-  }));
+  })));
  }
  static async systemMessage(ticket,event,content,transaction) {
   if(!['STATUS_CHANGED','UNFIXABLE','TOW_OFFER','PROVIDER_CHANGED'].includes(event))throw new Error('Unsupported system event');

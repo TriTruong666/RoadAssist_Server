@@ -13,7 +13,10 @@ module.exports = (server, app) => {
    if(!socket.data.token||!await JWT.verifyUserSession(socket.data.token))throw new Error('Unauthorized');next();
   }catch{next(new Error('Unauthorized'));}
  });
+ require('../services/dispatch_notification.service').setIO(io);
+ require('../services/finance_notification.service').setIO(io);
  io.on('connection',socket=>{
+  JWT.verifyUserSession(socket.data.token).then(actor=>{if(actor){socket.join(`user:${actor.userId}`);require('../services/dispatch_notification.service').deliver().catch(error=>console.error('[Dispatch notifications]',error.message));}}).catch(()=>socket.disconnect(true));
   const timer=setInterval(async()=>{try{if(!await JWT.verifyUserSession(socket.data.token))socket.disconnect(true);}catch{socket.disconnect(true);}},15000);timer.unref();socket.on('disconnect',()=>clearInterval(timer));
   const handle=(event,legacy,action)=>socket.on(event,async(data,ack)=>{
    const reply=typeof ack==='function'?ack:()=>{};
