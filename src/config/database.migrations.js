@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 async function runStartupDatabaseMigrations(sequelize) {
+  await require("./operations.migrations")(sequelize);
   while (await require("./chat.migrations").migrateHazardChat()) {
     /* bounded migration batches */
   }
