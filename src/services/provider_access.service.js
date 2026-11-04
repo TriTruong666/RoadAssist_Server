@@ -22,7 +22,10 @@ class ProviderAccessService {
   static async synchronize(user, transaction) {
     const permissions = await this.permissions(user, transaction);
     const sameServices = permissions.services.length === user.services.length && permissions.services.every(service => user.services.includes(service));
-    if (!sameServices || user.role !== permissions.role) await user.update(permissions, { transaction });
+    // JWT verification recalculates provider permissions from live profiles on every
+    // request. A derived guest/provider transition need not revoke valid sessions.
+    // Explicit role/password/account changes still increment sessionVersion.
+    if (!sameServices || user.role !== permissions.role) await user.update(permissions, { transaction, providerPermissionSync: true });
     return permissions;
   }
 }

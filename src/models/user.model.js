@@ -85,12 +85,15 @@ const User = sequelize.define(
       async beforeCreate(user) {
         user.password = await bcrypt.hash(user.password, 12);
       },
-      async beforeUpdate(user) {
+      async beforeUpdate(user, options) {
         if (user.changed("email")) user.emailVerifiedAt = null;
         if (user.changed("password"))
           user.password = await bcrypt.hash(user.password, 12);
+        const computedProviderRole = options.providerPermissionSync === true &&
+          ['guest', 'provider'].includes(user.previous('role')) && ['guest', 'provider'].includes(user.role) &&
+          !['password','status','email','emailVerifiedAt'].some(field => user.changed(field));
         if (
-          ["password", "status", "role", "email", "emailVerifiedAt"].some((field) =>
+          ["password", "status", ...(!computedProviderRole ? ["role"] : []), "email", "emailVerifiedAt"].some((field) =>
             user.changed(field),
           ) &&
           !user.changed("sessionVersion")
