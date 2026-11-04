@@ -228,7 +228,7 @@ Nhịp tim GPS của các đối tác đang bật trực ca được lưu trữ 
 - Cảnh báo 300m trả HTTP 409 kèm details.nearby; confirmNearby=true để xác nhận. Không dùng GPS mobile tắt ca/cũ trong cảnh báo vị trí.
 - Owner quản lý hồ sơ đang chờ/denied mà không cần có role provider trước; quyền nhận cuốc vẫn chỉ lấy từ hồ sơ ACTIVE, không suspended và xe hợp lệ.
 - Admin approve/deny/suspend/resume, owner/admin revoke, resubmit DENIED; lưu reason/reviewer/timestamp. Không thể né đình chỉ bằng revoke rồi tạo mới. Lịch sử cần duyệt lại không được tự ACTIVE qua đăng ký mới.
-- Owner mutation đổi role sẽ set cookie phiên mới; admin mutation có thể khiến owner phải đăng nhập lại bằng mật khẩu khi sessionVersion thay đổi.
+- Owner mutation đổi role sẽ set cookie phiên mới. Quyền provider được tính lại từ hồ sơ trên từng request; admin duyệt/đình chỉ gửi sự kiện `provider-updated` để client tải lại `/users/me`, không bắt đăng nhập lại chỉ vì quyền provider thay đổi. Đổi role trực tiếp, mật khẩu, trạng thái hoặc email vẫn thu hồi phiên theo sessionVersion.
 - Bật ca lưu động phải gửi GPS ngay; SHOP không heartbeat. Giờ mở cửa hỗ trợ qua đêm nhưng chỉ là thông tin, accepting là điều kiện nhận mới.
 - GPS lưu lịch sử PostgreSQL; GEO/metadata Redis atomic, freshness 900 giây, version chống callback cũ, sync sau commit. Có fallback SQL khi mất/lỗi cache và cron reconcile/prune mỗi phút, dừng cron khi shutdown.
 - Search bán kính tối đa 50km, lọc kind/rating/duty, sort distance/rating. Public DTO ẩn license, reviewer, userId và tọa độ mobile tắt ca/cũ; owner inactive bị loại ngay cả khi Redis còn dữ liệu mới.

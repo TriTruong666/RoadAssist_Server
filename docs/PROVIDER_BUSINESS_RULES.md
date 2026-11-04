@@ -79,3 +79,24 @@ Every valid chronological sample is retained privately with its quality and whet
 Turning duty off or administrative suspension stops new work. An already assigned, nonterminal rescue may continue private GPS while the provider is off-duty/suspended; those points never publish GEO or restore operational permission. Once that job ends, off-duty/suspended heartbeat submission is rejected. Phase 5 must authorize ongoing-trip location access through the ticket, independently of public discovery.
 
 S3 configuration, public URL policy and byte migration: [CHAT_AND_STORAGE.md](CHAT_AND_STORAGE.md).
+
+
+## Permission refresh in the browser
+
+Provider grants are derived from live approved profiles for every authenticated
+request. Internal guest/provider role synchronization does not revoke identity
+sessions; administrative approval or suspension is effective on the next request.
+`provider-updated` hints make the map refresh the profile and `/users/me` promptly.
+Manual role changes and password/status/email changes still invalidate sessions.
+The browser never grants a service from setup choices or JWT role claims.
+
+GPS capture timestamps describe the sensor sample, not request time. Clients
+request an uncached fix, skip samples already submitted, and never invent a new
+capture time for repeated coordinates. The web client currently sends up to one
+fresh sample per 30 seconds while visible and on duty or assigned to active work.
+
+An onboarded account with a DENIED or REVOKED application keeps access to the map
+and owner profile history. Review decisions do not undo setup or grant duty. A
+missing application for a newly requested service still requires setup. Owners
+can resubmit a denied profile, withdraw individual evidence and upload replacements;
+withdrawing evidence from an approved profile returns it to PENDING and stops duty.
