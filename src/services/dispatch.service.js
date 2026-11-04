@@ -1265,6 +1265,8 @@ class Dispatch {
         },
       };
     const data = this.dto(t);
+    data.handovers = await require("./handover.service").list(actor, id);
+    data.riderRating = await require("./rating.service").riderSummary(t.userId);
     data.operations = require("./dispatch_liveness.service").status(
       t,
       t.providerId ? await Provider.findByPk(t.providerId) : null,

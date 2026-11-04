@@ -254,7 +254,7 @@ class Intake {
       where: { id: { [Op.in]: ids } },
       transaction,
     });
-    if (actor.userId !== t.userId) {
+    if (actor.userId !== t.userId && actor.role !== "admin") {
       const owned = await Provider.findAll({
         where: { userId: actor.userId },
         attributes: ["id"],
@@ -266,6 +266,7 @@ class Intake {
     }
     return rows.map((row) => ({
       ...row.toJSON(),
+      isCandidate: row.id === t.candidateIntakeReservationId,
       expired:
         row.status === "REQUESTED"
           ? row.requestExpiresAt <= new Date()
