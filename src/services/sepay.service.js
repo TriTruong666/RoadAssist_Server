@@ -25,6 +25,9 @@ const normalize = (value) =>
     .toLowerCase();
 class Sepay {
   static assertConfig() {
+    const app = require("../config/app.config").app;
+    if (!["live", "mock"].includes(config.mode) || (app.isProduction && config.mode === "mock"))
+      throw new Error("PAYMENT_GATEWAY_MODE must be live in production, live or mock otherwise");
     Bills.bps();
     if (!["apikey", "hmac"].includes(config.webhookAuth))
       throw new Error("SEPAY_WEBHOOK_AUTH must be apikey or hmac");
@@ -42,6 +45,7 @@ class Sepay {
       throw new Error("PAYMENT_TTL_MINUTES must be 1..1440");
   }
   static authenticate(req) {
+    if (config.mode === "mock") Policy.fail("SEPAY_MOCK_MODE", "Webhook thật đang tắt khi dùng SePay mock", 503);
     if (config.webhookAuth === "hmac") {
       if (!config.webhookSecret)
         Policy.fail("SEPAY_NOT_CONFIGURED", "Chưa cấu hình webhook SePay", 503);

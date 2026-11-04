@@ -24,6 +24,7 @@ class Payments {
       .padStart(20, "0")}`;
   }
   static bank() {
+    if (config.mode === "mock") return { mock: true, accountNumber: "MOCK-ACCOUNT", bankCode: "MOCK", gatewayName: "ROADASSIST_MOCK", accountName: "Road Assist Simulation", subAccount: "", transferPrefix: "MOCK" };
     if (
       !config.accountNumber ||
       !config.bankCode ||
@@ -52,6 +53,7 @@ class Payments {
       receivedAmount: intent.receivedAmount,
       code: intent.code,
       expiresAt: intent.expiresAt,
+      mode: intent.bankSnapshot?.mock ? "mock" : "live",
       payments,
     };
     if (intent.method === "SEPAY") {
@@ -68,7 +70,7 @@ class Payments {
       result.bank = {
         ...bank,
         transferContent: des,
-        qrUrl: `https://vietqr.app/img?${params}`,
+        qrUrl: bank.mock ? null : `https://vietqr.app/img?${params}`,
       };
     }
     return result;
