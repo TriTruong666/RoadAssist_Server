@@ -73,6 +73,9 @@ class FlagService {
       if (!flag.reputationAwardedAt) { await User.increment('reputationPoints', { by: REPUTATION_REWARD, where: { userId: flag.userId }, transaction }); flag.reputationAwardedAt = new Date(); }
      } else if (flag.denyVotes >= FLAG_CONSENSUS_THRESHOLD && flag.denyVotes > flag.confirmVotes) { flag.status = '4'; flag.removedReason = 'CONSENSUS_DENIED'; }
      await flag.save({ transaction });
+     if (flag.status === '2')
+      await require('./admin_alert.service').enqueue('HAZARD_CONFIRMED', flag.id, flag.id,
+       `${flag.category === 'FLOOD' ? 'Ngập nước' : flag.category === 'ACCIDENT' ? 'Tai nạn' : 'Vật cản'} · ${flag.address || flag.description || 'Báo cáo cộng đồng'}`, transaction);
     }
    }
    return dto(flag);
