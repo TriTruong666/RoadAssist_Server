@@ -374,7 +374,7 @@ if (!enabled) {
     const session = await registerUser(details(22));
     const vehicles = require('../src/services/vehicle.service');
     const car = await vehicles.create(session.user.userId, { type: 'CAR', plateNumber: '30A12345', brand: 'Toyota', modelName: 'Test' });
-    const profile = await Provider.create({ userId: session.user.userId, vehicleProfileId: car.id, plateNumber: car.plateNumber, kind: 'TOW', status: 'ACTIVE', accepting: true });
+    const profile = await Provider.create({ userId: session.user.userId, vehicleProfileId: car.id, plateNumber: car.plateNumber, kind: 'TOW', status: 'ACTIVE', accepting: true, capabilities: ['TOWING'], supportedVehicleTypes: ['CAR'], towMaxWeightKg: 3500, towMaxWidth: 2.5, towMaxHeight: 3, towMaxLength: 6, towMethods: ['FLATBED'] });
     const authenticated = await Auth.completeLogin({ userId: session.user.userId, ipAddress: '127.0.0.1' });
     assert.deepEqual(authenticated.user.services, ['RIDER', 'TOW']);
     assert.equal(authenticated.user.role, 'provider');
@@ -385,7 +385,10 @@ if (!enabled) {
     assert.equal(profile.accepting, false);
     const user = await User.findOne({ where: { userId: session.user.userId } });
     assert.deepEqual(user.services, ['RIDER']);
-    assert.equal(await JWT.verifyUserSession(authenticated.token), null);
+    const reduced = await JWT.verifyUserSession(authenticated.token);
+    assert.equal(reduced.role, 'guest');
+    assert.deepEqual(reduced.services, ['RIDER']);
+    assert.equal((await request('POST', `/providers/${profile.id}/toggle-duty`, { accepting: true }, authenticated.token)).status, 403);
     assert.ok((await Auth.login({ email: details(22).email, password, ipAddress: '203.0.113.111' })).token);
   });
   test('open rider dispatch blocks edits and deletion; terminal dispatch permits them', async () => {
