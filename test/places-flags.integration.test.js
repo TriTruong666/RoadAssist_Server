@@ -150,19 +150,40 @@ if (process.env.RUN_DB_TESTS !== '1') {
  });
  test('routing sends only current confirmed polygons; upstream failures stay structured and saved geometry needs no routing call', async t => {
   const flag=await create({radiusMeters:100});await Flag.update({status:'2'},{where:{id:flag.id}});
-  const config=require('../src/config/app.config'); const oldKey=config.maps.maptilerApiKey;config.maps.maptilerApiKey='test-key';
-  t.mock.method(axios,'get',async()=>({data:{features:[{id:'1',text:'Test',place_name:'Test address',center:[106.69,10.77]}]}}));
+  const config=require('../src/config/app.config'); const oldKey=config.maps.maptilerApiKey; const oldOrigin=config.maps.maptilerRequestOrigin; config.maps.maptilerApiKey='test-key'; config.maps.maptilerRequestOrigin='http://127.0.0.1:5173';
+  t.mock.method(axios,'get',async(url,options)=>{assert.equal(options.headers.Origin,'http://127.0.0.1:5173'); assert.equal(options.params.country,'vn'); assert.equal(options.params.language,'vi'); assert.equal(options.params.proximity,'106.69,10.77'); return {data:{features:[{id:'1',text:'Test',place_name:'Test address',center:[106.69,10.77]}]}}; });
   t.mock.method(axios,'post',async(url,body)=>{
-   assert.ok(body.exclude_polygons.length>=1);assert.equal(body.shape_format,'geojson');
+   assert.ok(body.exclude_polygons.length>=1);assert.equal(body.shape_format,'geojson'); assert.equal(body.format,'osrm');
    assert.ok(body.exclude_polygons.every(r=>r.length===17&&r[0][0]===r[16][0]));
-   return {data:{trip:{legs:[{shape:{type:'LineString',coordinates:[[106.69,10.77],[106.7,10.78]]}}],summary:{length:2}}}};
+   return {data:{code:'Ok',routes:[{geometry:{type:'LineString',coordinates:[[106.69,10.77],[106.7,10.78]]},distance:2000,duration:300}]}};
   });
   try {
-   assert.equal((await request(owner,'GET','/places/search?q=Saigon')).items[0].name,'Test');
+   assert.equal((await request(owner,'GET','/places/search?q=Saigon&latitude=10.77&longitude=106.69')).items[0].name,'Test');
    const solved=await request(owner,'POST','/places/route',{stops:[origin,{latitude:10.78,longitude:106.7}]});assert.ok(solved.avoidedFlagIds.includes(flag.id));
    axios.post.mock.mockImplementation(async()=>{throw new Error('private upstream secret');});
    await request(owner,'POST','/places/route',{stops:[origin,origin]},503);
    await request(owner,'POST','/places/routes',{name:'Cached',stops:[origin,origin],geometry:solved.geometry},201);
-  }finally{config.maps.maptilerApiKey=oldKey;}
+  }finally{config.maps.maptilerApiKey=oldKey;config.maps.maptilerRequestOrigin=oldOrigin;}
  });
+ test('authenticated map tiles validate coordinates, share bounded cache and hide upstream credentials', async t => {
+  const config = require('../src/config/app.config'); const oldKey = config.maps.maptilerApiKey; const oldOrigin = config.maps.maptilerRequestOrigin;
+  config.maps.maptilerApiKey = 'private-fixture-key'; config.maps.maptilerRequestOrigin = 'http://127.0.0.1:5173';
+  const png = await require('sharp')({create:{width:16,height:16,channels:3,background:'#336699'}}).png().toBuffer();
+  const calls = [];
+  t.mock.method(axios,'get',async(url,options) => { calls.push(url); assert.equal(options.headers.Origin,'http://127.0.0.1:5173'); assert.equal(options.params.key,'private-fixture-key'); return {data:png,headers:{'content-type':'image/png','cache-control':'public, max-age=600'}}; });
+  const headers = { Cookie: `road_as_token=${owner.token}` };
+  try {
+   assert.equal((await fetch(base+'/api/v1/places/tiles/light/3/4/2.png')).status,401);
+   for(const path of ['light/3/8/2','bad/3/4/2','dark/20/4/2']) assert.equal((await fetch(base+'/api/v1/places/tiles/'+path+'.png',{headers})).status,400);
+   const results = await Promise.all([1,2].map(() => fetch(base+'/api/v1/places/tiles/light/3/4/2.png',{headers})));
+   for(const response of results) { assert.equal(response.status,200); assert.equal(response.headers.get('content-type'),'image/png'); assert.equal(response.headers.get('cache-control'),'private, max-age=600'); assert.deepEqual(Buffer.from(await response.arrayBuffer()),png); }
+   assert.equal(calls.length,1); assert.ok(calls[0].includes('/streets-v4/256/3/4/2.png'));
+   assert.equal((await fetch(base+'/api/v1/places/tiles/dark/3/4/2.png',{headers})).status,200);
+   assert.ok(calls[1].includes('/streets-v4-dark/256/3/4/2.png'));
+   axios.get.mock.mockImplementation(async()=>{throw new Error('private-fixture-key upstream authorization');});
+   const failure = await fetch(base+'/api/v1/places/tiles/light/3/5/2.png',{headers});
+   assert.equal(failure.status,503); const body = await failure.text(); assert.ok(!body.includes('private-fixture-key')); assert.ok(body.includes('MAP_SERVICE_UNAVAILABLE'));
+  } finally { config.maps.maptilerApiKey=oldKey; config.maps.maptilerRequestOrigin=oldOrigin; }
+ });
+
 }

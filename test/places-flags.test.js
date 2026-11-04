@@ -20,9 +20,12 @@ test('hazard exclusion polygons are closed, spherical and correct near poles/dat
   }
  }
 });
-test('Phase 4 Swagger exposes twenty operations with cookie security and bounded uploads', () => {
+test('Phase 4 Swagger exposes twenty-one operations including authenticated binary map tiles', () => {
  const spec=require('../src/config/places_flags.swagger');
- assert.equal(Object.values(spec.paths).reduce((n,p)=>n+Object.keys(p).length,0),20);
+ const tile = spec.paths['/api/v1/places/tiles/{theme}/{z}/{x}/{y}.png'].get;
+ assert.deepEqual(tile.security,[{cookieAuth:[]}]);
+ assert.equal(tile.responses[200].content['image/png'].schema.format,'binary');
+ assert.equal(Object.values(spec.paths).reduce((n,p)=>n+Object.keys(p).length,0),21);
  assert.deepEqual(spec.paths['/api/v1/flags/nearby'].get.security,[]);
  assert.deepEqual(spec.paths['/api/v1/flags'].post.security,[{cookieAuth:[]}]);
  assert.equal(spec.paths['/api/v1/flags'].post.requestBody.content['multipart/form-data'].schema.allOf[1].properties.images.maxItems,3);
