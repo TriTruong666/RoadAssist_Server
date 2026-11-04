@@ -111,6 +111,14 @@ if (process.env.RUN_DB_TESTS !== '1') {
     assert.equal(mobile.plateNumber, '59A12345'); assert.equal(mobile.status, 'ACTIVE');
     tow = (await ok(owner, 'POST', '/providers', business('TOW', { vehicleProfileId: car.id, plateNumber: ' 30a-123.45 ', status: 'ACTIVE' }), 201)).provider;
     assert.equal(tow.status, 'PENDING'); assert.equal(tow.plateNumber, '30A12345');
+    const review = await ok(admin, 'GET', `/providers/${tow.id}`);
+    assert.equal(review.vehicle.type, 'CAR');
+    assert.equal(Number(review.vehicle.baseWidth), Number(car.baseWidth));
+    assert.equal(review.vehicle.userId, undefined);
+    assert.equal(review.owner.email, owner.email);
+    const publicMobile = await ok(null, 'GET', `/providers/${mobile.id}`);
+    assert.equal(publicMobile.vehicle, undefined); assert.equal(publicMobile.owner, undefined);
+
     assert.equal((await ok(owner, 'GET', '/users/me')).services.includes('TOW'), false);
     assert.equal((await request(owner, 'POST', `/providers/${tow.id}/toggle-duty`, { accepting: true, ...origin })).status, 403);
   });
@@ -228,6 +236,7 @@ if (process.env.RUN_DB_TESTS !== '1') {
     await ok(owner, 'POST', `/providers/${mobile.id}/toggle-duty`, { accepting: true, ...origin });
     assert.equal((await request(admin, 'PUT', `/admin/providers/${mobile.id}/suspend`, { suspended: true })).status, 400);
     await ok(admin, 'PUT', `/admin/providers/${mobile.id}/suspend`, { suspended: true, reason: 'Kiểm tra hồ sơ' });
+    assert.ok((await ok(admin, 'GET', '/admin/providers?status=SUSPENDED')).items.some(row => row.id === mobile.id && row.suspended));
     assert.equal(await redis.zscore(Location.geoKey, mobile.id), null);
     assert.equal((await request(owner, 'POST', '/providers/location', { providerId: mobile.id, ...origin })).status, 403);
     await ok(owner, 'POST', `/providers/${mobile.id}/revoke`, {});
@@ -271,7 +280,7 @@ if (process.env.RUN_DB_TESTS !== '1') {
     await Location.reconcile();
     assert.notEqual(await redis.zscore(Location.geoKey, mobile.id), null);
   });
-  test('approval revalidates license and replaces the guest role; owner must reauthenticate after an admin role change', async () => {
+  test('approval revalidates license and computed provider grants take effect without losing the owner session', async () => {
     const applicant = await client(4);
     const applicantCar = await vehicle(applicant, 'CAR', '51A99988');
     const body = business('TOW', { vehicleProfileId: applicantCar.id }); delete body.licenseNumber;
@@ -279,8 +288,9 @@ if (process.env.RUN_DB_TESTS !== '1') {
     assert.equal((await request(admin, 'PUT', `/admin/providers/${profile.id}/approve`, { reason: 'Kiểm tra hồ sơ' })).status, 400);
     await ok(applicant, 'PUT', `/providers/${profile.id}`, { licenseNumber: 'APPROVED-LICENSE' });
     await ok(admin, 'PUT', `/admin/providers/${profile.id}/approve`, {});
-    assert.equal((await request(applicant, 'GET', '/users/me')).status, 401);
-    await login(applicant);
+    const current = await request(applicant, 'GET', '/users/me');
+    assert.equal(current.status, 200);
+    assert.equal(current.body.data.role, 'provider');
     assert.deepEqual((await ok(applicant, 'GET', '/users/me')).services, ['RIDER', 'TOW']);
     assert.equal((await request(applicant, 'PUT', `/providers/${profile.id}`, { resubmit: true })).status, 409);
   });

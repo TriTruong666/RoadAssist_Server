@@ -65,8 +65,9 @@ class ProviderService {
     return nearby;
   }
   static async completeMutation(user, actor, transaction, result, oldVersion, context) {
+    const oldRole = user.role, oldServices = JSON.stringify(user.services);
     await Access.synchronize(user, transaction);
-    if (actor.userId === user.userId && oldVersion !== user.sessionVersion) result.session = await Auth.issueSession(user, context, transaction);
+    if (actor.userId === user.userId && (oldVersion !== user.sessionVersion || oldRole !== user.role || oldServices !== JSON.stringify(user.services))) result.session = await Auth.issueSession(user, context, transaction);
     if (result.provider) {
       const profile = await Provider.findByPk(result.provider.id, { transaction });
       result.availability = await Availability.describe(profile, transaction);
@@ -206,6 +207,7 @@ class ProviderService {
         await profile.update({ status: action === 'approve' ? 'ACTIVE' : 'DENIED', accepting: false, requiresApproval: true, denialReason: action === 'deny' ? data.reason : null,
           reviewedAt: new Date(), reviewedBy: actor.userId, reviewedRevision: action === 'approve' ? profile.profileRevision : profile.reviewedRevision }, { transaction, auditAction: action === 'approve' ? 'APPROVED' : 'DENIED', auditReason: data.reason });
       }
+      await require('./finance_notification.service').enqueue([profile.userId], 'provider-updated', { providerId: profile.id, status: profile.status, suspended: profile.suspended }, transaction);
       return { provider: profile.toJSON() };
     }, context);
   }
@@ -222,9 +224,9 @@ class ProviderService {
     return Promise.all(rows.map(async profile => ({ ...profile.toJSON(), availability: await Availability.describe(profile) })));
   }
   static async get(id, actor) {
-    const profile = await Provider.findByPk(id, { include: [{ model: User, as: 'owner', attributes: ['status', 'emailVerifiedAt'] }, { model: VehicleProfile, as: 'vehicle', attributes: ['id', 'userId', 'type', 'isActive'] }] });
+    const profile = await Provider.findByPk(id, { include: [{ model: User, as: 'owner', attributes: ['status', 'emailVerifiedAt', 'name', 'email', 'phone'] }, { model: VehicleProfile, as: 'vehicle', attributes: ['id', 'userId', 'type', 'isActive', 'plateNumber', 'brand', 'modelName', 'baseWidth', 'baseHeight', 'length', 'weightKg'] }] });
     if (!profile) throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
-    if (actor && (actor.userId === profile.userId || actor.role === 'admin')) { const data = profile.toJSON(); delete data.owner; delete data.vehicle; return { ...data, availability: await Availability.describe(profile) }; }
+    if (actor && (actor.userId === profile.userId || actor.role === 'admin')) { const data = profile.toJSON(); delete data.owner; delete data.vehicle; return { ...data, ...(actor.role === 'admin' && { owner: pick(profile.owner?.toJSON() || {}, ['name','email','phone']) }), vehicle: profile.vehicle ? pick(profile.vehicle.toJSON(), ['id','type','isActive','plateNumber','brand','modelName','baseWidth','baseHeight','length','weightKg']) : null, availability: await Availability.describe(profile) }; }
     if (profile.status !== 'ACTIVE' || profile.suspended || profile.owner?.status !== 'ACTIVE' || !profile.owner.emailVerifiedAt) throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
     if (profile.kind !== 'SHOP' && (!profile.vehicle?.isActive || profile.vehicle.userId !== profile.userId || profile.kind === 'TOW' && profile.vehicle.type !== 'CAR')) throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
     return this.publicProfile(profile);

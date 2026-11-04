@@ -17,11 +17,15 @@ async function record(provider, options) {
   const { ProviderAuditLog } = sequelize.models;
   if (!ProviderAuditLog) return;
   const before = creating ? null : options.auditBefore || await snapshot(provider._previousDataValues, options.transaction, options.auditBeforeVehicle);
-  await ProviderAuditLog.create({ providerId: provider.id,
+  const entry = await ProviderAuditLog.create({ providerId: provider.id,
     actorUserId: options.auditActorId || options.transaction?.roadAssistActorId || null,
     action: options.auditAction || (creating ? 'REGISTERED' : 'UPDATED'),
     reason: options.auditReason || provider.denialReason || provider.suspensionReason || provider.revocationReason || null,
     before, after: await snapshot(provider.get({ plain: true }), options.transaction),
   }, { transaction: options.transaction });
+  if (options.transaction && provider.status === 'PENDING' && (creating || before?.status !== 'PENDING')) {
+    await require('./admin_alert.service').enqueue('PROVIDER_REVIEW', provider.id, entry.id,
+      provider.name, options.transaction);
+  }
 }
 module.exports = { REVIEW_FIELDS, SNAPSHOT_FIELDS, snapshot, record };
