@@ -48,6 +48,8 @@ const schemas = {
       ],
     },
     requestExpiresAt: { type: "string", format: "date-time" },
+    isCandidate: { type: "boolean", description: "Current alternative destination awaiting rider consent." },
+    expired: { type: "boolean" },
     holdUntil: { type: "string", format: "date-time", nullable: true },
     acceptedAt: { type: "string", format: "date-time", nullable: true },
     reason: text(200),

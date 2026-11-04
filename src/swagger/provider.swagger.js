@@ -107,3 +107,8 @@ paths['/api/v1/providers'].post.description = 'One live profile per owner/kind; 
 paths['/api/v1/providers/{id}/documents/{documentId}/content'].get.responses[200] = { description: 'Authenticated private image attachment', headers: { 'Cache-Control': { schema: { type: 'string', example: 'no-store' } } }, content: Object.fromEntries(['image/png', 'image/jpeg', 'image/webp'].map(type => [type, { schema: { type: 'string', format: 'binary' } }])) };
 
 paths['/api/v1/providers/{id}/documents/{documentId}/content'].get.responses[302] = { description: 'Redirect to public S3 URL', headers: { Location: { schema: { type: 'string', format: 'uri' } } } };
+
+Object.assign(schemas.Provider.properties, {
+  owner: { type: 'object', description: 'Admin detail only; never present in PublicProvider.', properties: { name: text(), email: text({ format: 'email' }), phone: text() } },
+  vehicle: { type: 'object', nullable: true, description: 'Owner/admin detail only; physical vehicle for review. No owner ID is included.', properties: { id: uuid(), type: text({ enum: ['BIKE','CAR'] }), plateNumber: text(), brand: text(), modelName: text(), isActive: { type: 'boolean' }, baseWidth: { type: 'number' }, baseHeight: { type: 'number' }, length: { type: 'number' }, weightKg: { type: 'number' } } },
+});

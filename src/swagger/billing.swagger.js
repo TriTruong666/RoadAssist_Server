@@ -61,6 +61,8 @@ const schemas = {
       commissionAmount: amount,
       payoutAmount: amount,
       cashCommissionOutstanding: amount,
+      ticketId: uuid,
+      canConfirmCash: { type: "boolean", description: "Present on provider earnings rows; true only for an owned pending CASH payment whose rescue is at handover or a terminal settlement stage. Server rechecks on confirmation." },
     },
   },
   PaymentCreate: {

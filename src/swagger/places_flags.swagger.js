@@ -254,8 +254,10 @@ for (const [path, input] of [
   });
   operation("/places/" + path + "/{id}", "delete", "Delete own saved " + path);
 }
-operation("/places/search", "get", "Search MapTiler places", {
+operation("/places/search", "get", "Search MapTiler places in Vietnam", {
   parameters: [
+    { name: "latitude", in: "query", description: "Optional proximity bias; supply longitude together", schema: { type: "number", minimum: -85.05112878, maximum: 85.05112878 } },
+    { name: "longitude", in: "query", description: "Optional proximity bias; supply latitude together", schema: { type: "number", minimum: -180, maximum: 180 } },
     {
       name: "q",
       in: "query",
@@ -267,7 +269,11 @@ operation("/places/search", "get", "Search MapTiler places", {
 operation(
   "/places/route",
   "post",
-  "Solve Valhalla route excluding unexpired confirmed/locked hazard areas",
+  "Solve real Valhalla route excluding unexpired confirmed/locked hazard areas; returns GeoJSON and summary.length in km / summary.time in seconds",
   { input: "RouteSolveInput" },
 );
+operation("/places/tiles/{theme}/{z}/{x}/{y}.png", "get", "Authenticated MapTiler raster basemap; fixed upstream origin and bounded shared cache", {
+  parameters: [{ name: "theme", in: "path", required: true, schema: { type: "string", enum: ["light","dark"] } }, ...["z","x","y"].map(name => ({ name, in: "path", required: true, schema: { type: "integer", minimum: 0, maximum: name === "z" ? 19 : 524287 }, description: name === "z" ? "Zoom" : "Tile index must be less than 2^z" }))],
+});
+paths["/api/v1/places/tiles/{theme}/{z}/{x}/{y}.png"].get.responses[200] = { description: "PNG bytes; private HTTP cache; credentials never leave server", content: { "image/png": { schema: { type: "string", format: "binary" } } } };
 module.exports = { schemas, paths };
