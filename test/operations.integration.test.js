@@ -912,6 +912,12 @@ else {
     const preview = await request(shopper2, "GET", `/dispatch/${t.id}`);
     assert.equal(preview.intakes.length, 1);
     assert.equal(preview.intakes[0].id, proposal.id);
+    assert.equal(preview.intakes[0].isCandidate, true);
+    const staff = await request(admin, "GET", `/admin/dispatch/tickets/${t.id}`);
+    assert.equal(staff.intakes.length, 2);
+    assert.equal(staff.intakes.filter(row => row.isCandidate).length, 1);
+    assert.ok(staff.supportCases.some(row => row.status === "OPEN"));
+
     assert.equal(preview.providerLocation, undefined);
     await act(shopper2, t, "intake/accept", { reservationId: proposal.id });
     assert.equal(await Availability.activeJobs(shop), 1);

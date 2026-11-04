@@ -462,6 +462,28 @@ else {
     );
     assert.equal(earnings.cashCommissionDebt, "10000.00");
   });
+  test("payout batches retain bank destination snapshots after the owner edits preferences", async () => {
+    const account = { bankCode: "VCB", accountNumber: "001234567890", accountName: "E2E PROVIDER" };
+    await request(provider, "PUT", "/users/payout-account", account);
+    await settleOnline(await quote());
+    const batch = await request(admin, "POST", "/admin/payouts/create-batch", {}, 201);
+    assert.deepEqual(batch.entries[0].bankSnapshot, account);
+    await request(provider, "PUT", "/users/payout-account", { ...account, accountNumber: "009876543210" });
+    const reloaded = await request(admin, "GET", `/admin/payouts/batches/${batch.id}`);
+    assert.deepEqual(reloaded.entries[0].bankSnapshot, account);
+    await request(provider, "GET", `/admin/payouts/batches/${batch.id}`, undefined, 403);
+    const stats = await request(admin, "GET", "/admin/stats");
+    const pending = stats.payouts.find(row => row.status === "PENDING");
+    assert.equal(pending.net, batch.net);
+    assert.equal(pending.commission, batch.commission);
+    assert.equal(stats.financial.grossGmv, "100000.00");
+    assert.equal(stats.financial.platformCommission, "10000.00");
+    assert.equal(stats.financial.pendingPayouts, batch.net);
+    assert.equal(stats.financial.unbatchedOnline, "0.00");
+    await request(admin, "PUT", `/admin/payouts/${batch.id}/settle`, { transfers: [{ entryId: batch.entries[0].id, amount: batch.net, reference: "IMMUTABLE-BANK-SNAPSHOT" }] });
+    const settled = (await request(admin, "GET", "/admin/stats")).payouts.find(row => row.status === "SETTLED");
+    assert.equal(settled.net, batch.net);
+  });
   test("cash commission offsets online payout without double paying cash; settle is idempotent and precise", async () => {
     const cash = await settleCash(await quote());
     const online = await settleOnline(await quote());
