@@ -15,7 +15,10 @@
     "deploy": "node scripts/deploy.js",
     "docker:prod": "docker compose -f docker-compose.prod.yml up --build -d",
     "test": "node --test test/*.test.js",
-    "test:integration": "RUN_DB_TESTS=1 node --test test/*.integration.test.js"
+    "test:integration": "RUN_DB_TESTS=1 node --test test/*.integration.test.js",
+    "infra:routing": "docker compose -f docker-compose.dev.yml --profile routing up -d valhalla",
+    "infra:routing:logs": "docker compose -f docker-compose.dev.yml --profile routing logs -f valhalla",
+    "seed:demo": "node scripts/seed-demo.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
