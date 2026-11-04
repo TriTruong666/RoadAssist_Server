@@ -181,6 +181,7 @@ class Payouts {
             actor.userId,
           );
         available -= recoveryOffset;
+        const payoutAccount = await require('../models').PayoutAccount.findByPk(owner, { transaction });
         await Entry.create(
           {
             batchId: batch.id,
@@ -192,6 +193,7 @@ class Payouts {
             debtOffset: Money.amount(offset),
             recoveryOffset: Money.amount(recoveryOffset),
             netAmount: Money.amount(available),
+            bankSnapshot: payoutAccount ? { bankCode: payoutAccount.bankCode, accountNumber: payoutAccount.accountNumber, accountName: payoutAccount.accountName } : null,
           },
           { transaction },
         );
@@ -221,13 +223,11 @@ class Payouts {
     });
   }
   static async dto(batch, transaction) {
+    const entries = await Entry.findAll({ where: { batchId: batch.id }, order: [["userId", "ASC"]], transaction });
+    const users = entries.length ? await require('../models').User.findAll({ where: { userId: { [Op.in]: entries.map(entry => entry.userId) } }, attributes: ['userId','name'], transaction }) : [];
     return {
       ...batch.toJSON(),
-      entries: await Entry.findAll({
-        where: { batchId: batch.id },
-        order: [["userId", "ASC"]],
-        transaction,
-      }),
+      entries: entries.map(entry => ({ ...entry.toJSON(), providerName: users.find(user => user.userId === entry.userId)?.name || 'Đối tác' })),
       recoveryOffsets: await require("../models").RecoveryOffset.findAll({
         where: { batchId: batch.id },
         transaction,
@@ -438,6 +438,12 @@ class Payouts {
     });
     return { total: result.count, items: result.rows };
   }
+  static async detail(actor, id) {
+    await Locks.admin(actor);
+    const batch = await Batch.findByPk(id);
+    if (!batch) require('./dispatch_policy.service').fail('PAYOUT_BATCH_NOT_FOUND', 'Không tìm thấy đợt chi trả', 404);
+    return this.dto(batch);
+  }
   static async earnings(actor, { limit = 50, offset = 0 }) {
     const rows = await Pay.findAll({ where: { providerUserId: actor.userId } });
     const gross = rows
@@ -449,6 +455,10 @@ class Payouts {
     const held = rows
       .filter((p) => p.status === "HELD")
       .reduce((n, p) => n + Money.cents(p.appliedAmount), 0);
+    const page = rows.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(offset, offset + limit);
+    const items = await Item.findAll({ where: { id: page.map(row => row.billItemId) }, attributes: ['id','ticketId'] });
+    const tickets = await Ticket.findAll({ where: { id: items.map(item => item.ticketId) }, attributes: ['id','status','providerId'] });
+    const byItem = new Map(items.map(item => [item.id, tickets.find(ticket => ticket.id === item.ticketId)]));
     return {
       gross: Money.amount(gross),
       held: Money.amount(held),
@@ -456,9 +466,10 @@ class Payouts {
       disputeRecoveries: await require("./provider_recovery.service").balances(
         actor.userId,
       ),
-      payments: rows
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        .slice(offset, offset + limit),
+      payments: page.map(payment => {
+        const ticket = byItem.get(payment.billItemId);
+        return { ...payment.toJSON(), ticketId: ticket?.id, canConfirmCash: payment.method === 'CASH' && payment.status === 'PENDING' && ticket?.providerId === payment.providerId && ['7','4','15','12'].includes(ticket.status) };
+      }),
       payouts: await Entry.findAll({
         where: { userId: actor.userId },
         order: [["createdAt", "DESC"]],

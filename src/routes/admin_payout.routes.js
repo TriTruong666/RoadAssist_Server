@@ -5,6 +5,7 @@ const validate = require("../middlewares/validate.middleware");
 const R = require("../common/response.handler");
 const { protect, restrictTo } = require("../middlewares/auth.middleware");
 router.use(protect, restrictTo("admin"));
+router.get("/batches/:id", schema.id, validate, async (req, res) => R.success(res, await S.detail(req.user, req.validated.id)));
 router.get("/pending-items", schema.page, validate, async (req, res) =>
   R.success(res, await S.pending(req.user, req.validated)),
 );

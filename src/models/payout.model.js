@@ -43,6 +43,7 @@ const PayoutEntry = db.define(
     debtOffset: money("debt_offset"),
     recoveryOffset: money("recovery_offset"),
     netAmount: money("net_amount"),
+    bankSnapshot: { type: D.JSONB, field: "bank_snapshot" },
     externalReference: { type: D.STRING(150), field: "external_reference" },
   },
   {
