@@ -61,7 +61,7 @@ class ChatService {
    const where={roomId:room.id};
    if(before){const cursor=await Message.findOne({where:{id:before,roomId:room.id},transaction});if(!cursor)throw new BadRequestException('Cursor không thuộc phòng chat');where[Op.or]=[{createdAt:{[Op.lt]:cursor.createdAt}},{createdAt:cursor.createdAt,id:{[Op.lt]:cursor.id}}];}
    const rows=await Message.findAll({where,include:[{model:User,attributes:['name']}],order:[['createdAt','DESC'],['id','DESC']],limit:limit+1,offset,transaction});
-   const more=rows.length>limit;const items=rows.slice(0,limit).map(row=>this.dto(row));
+   const more=rows.length>limit;const items=rows.slice(0,limit).map(row=>({...this.dto(row),mine:row.senderId===actor.userId}));
    return {room:room.toJSON(),items,nextCursor:more?items.at(-1).id:null};
   });
  }
