@@ -1,0 +1,11 @@
+const router = require("express").Router();
+const S = require("../schemas/rating.schema");
+const C = require("../controllers/rating.controller");
+const validate = require("../middlewares/validate.middleware");
+const { protect } = require("../middlewares/auth.middleware");
+router.get("/provider/:providerId", S.provider, S.page, validate, C.provider);
+router.use(protect);
+router.post("/", S.create, validate, C.submit);
+router.post("/:id/reply", S.reply, validate, C.reply);
+router.get("/ticket/:ticketId", S.ticket, validate, C.ticket);
+module.exports = router;
