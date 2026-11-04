@@ -73,7 +73,7 @@ class AuthService {
       ),
       refreshToken,
       requiresVerification: false,
-      user: user.toJSON(),
+      user: { ...user.toJSON(), setup: await require("./setup.service").describe(user, transaction) },
     };
   }
   static recordLogin(user, context, transaction) {

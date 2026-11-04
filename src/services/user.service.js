@@ -17,12 +17,13 @@ class UserService {
     const permissions = await require("./provider_access.service").permissions(
       user,
     );
-    return { ...user.toJSON(), ...permissions, activeVehicle };
+    return { ...user.toJSON(), ...permissions, activeVehicle, setup: await require("./setup.service").describe(user) };
   }
   static async update(userId, data) {
     await sequelize.transaction(async (transaction) => {
       const user = await VehicleService.lockUser(userId, transaction);
       await user.update(data, { transaction });
+      if (data.avatar) await require('../models').S3Asset.update({ attachedTo: `avatar:${userId}` }, { where: { userId, s3Url: data.avatar }, transaction });
     });
     return this.me(userId);
   }
