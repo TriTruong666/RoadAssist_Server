@@ -96,6 +96,7 @@ module.exports = {
     from: process.env.MAIL_FROM || null,
   },
   sepay: {
+    mode: process.env.PAYMENT_GATEWAY_MODE || (["production", "test"].includes(process.env.NODE_ENV) ? "live" : "mock"),
     apiUrl: process.env.SEPAY_API_URL || "https://my.sepay.vn/userapi",
     apiKey: process.env.SEPAY_API_KEY || null,
     accountNumber: process.env.SEPAY_ACCOUNT_NUMBER || null,
@@ -115,6 +116,7 @@ module.exports = {
   maps: {
     vietmapApiToken: process.env.VIETMAP_API_TOKEN || null,
     maptilerApiKey: process.env.MAPTILER_API_KEY || null,
+    maptilerRequestOrigin: process.env.MAPTILER_REQUEST_ORIGIN || null,
     valhallaRouterUrl:
       process.env.VALHALLA_ROUTER_URL || "http://valhalla:8002/route",
   },
