@@ -1,0 +1,38 @@
+# Shared Valhalla service. The first start downloads real OSM data and builds
+# routing tiles; subsequent starts reuse the persistent volume.
+services:
+  valhalla:
+    image: ${VALHALLA_IMAGE:-ghcr.io/valhalla/valhalla-scripted@sha256:e2078b638205fba6ef246d8ae731d7f197b346a0ebc74fb5f41b01db50504c90}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${VALHALLA_PORT:-8002}:8002"
+    environment:
+      tile_urls: ${VALHALLA_PBF_URL:-https://download.geofabrik.de/asia/vietnam-latest.osm.pbf}
+      use_tiles_ignore_pbf: "True"
+      force_rebuild: "False"
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "2"
+    volumes:
+      - roadassist_valhalla_data:/custom_files
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8002/status', timeout=5).read()",
+        ]
+      start_period: 30m
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    mem_limit: 4g
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"
+volumes:
+  roadassist_valhalla_data:

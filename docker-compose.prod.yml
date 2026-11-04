@@ -18,6 +18,17 @@ services:
     networks:
       - roadassist-network
 
+  valhalla:
+    extends:
+      file: docker-compose.routing.yml
+      service: valhalla
+    profiles: [routing]
+    networks:
+      - roadassist-network
+
+volumes:
+  roadassist_valhalla_data:
+
 networks:
   roadassist-network:
     external: true
