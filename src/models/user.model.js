@@ -29,7 +29,12 @@ const User = sequelize.define(
     },
     password: { type: DataTypes.STRING, allowNull: false },
     phone: { type: DataTypes.STRING(20), unique: true, allowNull: false },
-    reputationPoints: { type: DataTypes.INTEGER, defaultValue: 0, allowNull: false, field: 'reputation_points' },
+    reputationPoints: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      field: "reputation_points",
+    },
     avatar: { type: DataTypes.STRING(2048), allowNull: true },
     role: {
       type: DataTypes.ENUM(...ROLES),
@@ -68,10 +73,22 @@ const User = sequelize.define(
       allowNull: false,
       field: "session_version",
     },
-    emailVerifiedAt: { type: DataTypes.DATE, allowNull: true, field: "email_verified_at" },
+    emailVerifiedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "email_verified_at",
+    },
     requestedServices: {
-      type: DataTypes.ARRAY(DataTypes.STRING), defaultValue: ["RIDER"], allowNull: false,
-      field: "requested_services", validate: { supported(value) { if (!value.every(v => SERVICES.includes(v))) throw new Error("Invalid requested service"); } },
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: ["RIDER"],
+      allowNull: false,
+      field: "requested_services",
+      validate: {
+        supported(value) {
+          if (!value.every((v) => SERVICES.includes(v)))
+            throw new Error("Invalid requested service");
+        },
+      },
     },
     loginIp: { type: DataTypes.STRING(50), field: "login_ip" },
     loginAt: { type: DataTypes.DATE, field: "login_at" },
@@ -89,13 +106,21 @@ const User = sequelize.define(
         if (user.changed("email")) user.emailVerifiedAt = null;
         if (user.changed("password"))
           user.password = await bcrypt.hash(user.password, 12);
-        const computedProviderRole = options.providerPermissionSync === true &&
-          ['guest', 'provider'].includes(user.previous('role')) && ['guest', 'provider'].includes(user.role) &&
-          !['password','status','email','emailVerifiedAt'].some(field => user.changed(field));
-        if (
-          ["password", "status", ...(!computedProviderRole ? ["role"] : []), "email", "emailVerifiedAt"].some((field) =>
+        const computedProviderRole =
+          options.providerPermissionSync === true &&
+          ["guest", "provider"].includes(user.previous("role")) &&
+          ["guest", "provider"].includes(user.role) &&
+          !["password", "status", "email", "emailVerifiedAt"].some((field) =>
             user.changed(field),
-          ) &&
+          );
+        if (
+          [
+            "password",
+            "status",
+            ...(!computedProviderRole ? ["role"] : []),
+            "email",
+            "emailVerifiedAt",
+          ].some((field) => user.changed(field)) &&
           !user.changed("sessionVersion")
         ) {
           user.sessionVersion = Number(user.sessionVersion) + 1;

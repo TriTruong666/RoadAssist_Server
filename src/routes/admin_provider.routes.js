@@ -1,12 +1,24 @@
-const router = require('express').Router();
-const controller = require('../controllers/provider.controller');
-const schema = require('../schemas/provider.schema');
-const validate = require('../middlewares/validate.middleware');
-const { protect, restrictTo } = require('../middlewares/auth.middleware');
-router.use(protect, restrictTo('admin'));
-router.get('/pending-tows', schema.pending, validate, controller.pendingTows);
-router.get('/pending', schema.pending, validate, controller.pending);
-router.put('/:id/approve', schema.id, schema.approve, validate, controller.approve);
-router.put('/:id/deny', schema.id, schema.deny, validate, controller.deny);
-router.put('/:id/suspend', schema.id, schema.suspend, validate, controller.suspend);
+const router = require("express").Router();
+const controller = require("../controllers/provider.controller");
+const schema = require("../schemas/provider.schema");
+const validate = require("../middlewares/validate.middleware");
+const { protect, restrictTo } = require("../middlewares/auth.middleware");
+router.use(protect, restrictTo("admin"));
+router.get("/pending-tows", schema.pending, validate, controller.pendingTows);
+router.get("/pending", schema.pending, validate, controller.pending);
+router.put(
+  "/:id/approve",
+  schema.id,
+  schema.approve,
+  validate,
+  controller.approve,
+);
+router.put("/:id/deny", schema.id, schema.deny, validate, controller.deny);
+router.put(
+  "/:id/suspend",
+  schema.id,
+  schema.suspend,
+  validate,
+  controller.suspend,
+);
 module.exports = router;

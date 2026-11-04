@@ -1,8 +1,9 @@
 [
+  
   {
-    "name": "RoadAssist Admin",
-    "email": "admin@roadassist.vn",
-    "password": "M@tkhau123!",
+    "name": "Admin1",
+    "email": "trithse184813@fpt.edu.vn",
+    "password": "M@tkhau123",
     "phone": "0900000001",
     "role": "admin",
     "services": ["RIDER"],
