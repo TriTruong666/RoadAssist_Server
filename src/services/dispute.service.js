@@ -147,6 +147,9 @@ class Disputes {
         { disputeId: row.id, ticketId: t.id, responseDueAt: row.responseDueAt },
         transaction,
       );
+      await require("./admin_alert.service").enqueue(
+        "DISPUTE_OPENED", row.id, row.id, `Cuốc ${t.code}`, transaction,
+      );
       return this.dto(row, transaction);
     });
   }
@@ -268,6 +271,18 @@ class Disputes {
       const row = await Dispute.findByPk(id, { transaction });
       await this.authorize(actor, row, transaction, admin);
       return this.dto(row, transaction);
+    });
+  }
+  static async transcript(actor, id, { version, limit = 50, offset = 0 } = {}) {
+    const { ChatRoom, ChatMessage, User } = require('../models');
+    return Locks.transaction(async transaction => {
+      const dispute = await Dispute.findByPk(id, { transaction });
+      await this.authorize(actor, dispute, transaction, true);
+      const rooms = await ChatRoom.findAll({ where: { scope: 'DISPATCH', referenceId: dispute.ticketId }, attributes: ['id','version','isArchived'], order: [['version','ASC']], transaction });
+      const room = version ? rooms.find(row => row.version === version) : rooms.at(-1);
+      if (!room) return { rooms, room: null, total: 0, items: [] };
+      const result = await ChatMessage.findAndCountAll({ where: { roomId: room.id }, include: [{ model: User, attributes: ['name'] }], order: [['createdAt','ASC'],['id','ASC']], limit, offset, transaction });
+      return { rooms, room, total: result.count, items: result.rows.map(message => require('./chat.service').dto(message)) };
     });
   }
   static async list(

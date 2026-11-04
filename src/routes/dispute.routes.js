@@ -25,6 +25,8 @@ router.post(
 );
 const admin = require("express").Router();
 admin.use(protect, restrictTo("admin"));
+admin.get('/:id/chat', base.id, base.page, require('express-validator').query('version').optional().isInt({ min: 1 }).toInt(), validate,
+  async (req, res) => R.success(res, await S.transcript(req.user, req.validated.id, req.validated)));
 admin.get("/", base.page, schema.list, validate, async (req, res) =>
   R.success(res, await S.list(req.user, req.validated, true)),
 );
