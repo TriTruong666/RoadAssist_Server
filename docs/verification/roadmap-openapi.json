@@ -1,0 +1,482 @@
+[
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/register",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/register-provider",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/login",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/verify-otp",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/verify-email",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/resend-verification",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/send-verification",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/refresh-token",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/logout",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/forgot-password",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/auth/reset-password",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "GET",
+    "route": "/api/v1/users/me",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "PUT",
+    "route": "/api/v1/users/me",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "PUT",
+    "route": "/api/v1/users/onboard",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "PUT",
+    "route": "/api/v1/users/active-vehicle",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "GET",
+    "route": "/api/v1/vehicles",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "POST",
+    "route": "/api/v1/vehicles",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "PUT",
+    "route": "/api/v1/vehicles/{id}",
+    "documented": true
+  },
+  {
+    "document": "02_PHASE_2_AUTH_USER_AND_VEHICLES.md",
+    "method": "DELETE",
+    "route": "/api/v1/vehicles/{id}",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "POST",
+    "route": "/api/v1/providers",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "GET",
+    "route": "/api/v1/providers/me",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "GET",
+    "route": "/api/v1/providers/{id}",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "PUT",
+    "route": "/api/v1/providers/{id}",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "POST",
+    "route": "/api/v1/providers/{id}/toggle-duty",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "POST",
+    "route": "/api/v1/providers/location",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "POST",
+    "route": "/api/v1/providers/{id}/revoke",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "POST",
+    "route": "/api/v1/providers/search",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "GET",
+    "route": "/api/v1/admin/providers/pending-tows",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "PUT",
+    "route": "/api/v1/admin/providers/{id}/approve",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "PUT",
+    "route": "/api/v1/admin/providers/{id}/deny",
+    "documented": true
+  },
+  {
+    "document": "03_PHASE_3_PROVIDERS_AND_DUTY.md",
+    "method": "PUT",
+    "route": "/api/v1/admin/providers/{id}/suspend",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "POST",
+    "route": "/api/v1/flags",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "GET",
+    "route": "/api/v1/flags/nearby",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "GET",
+    "route": "/api/v1/flags/my",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "GET",
+    "route": "/api/v1/flags/{id}",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "POST",
+    "route": "/api/v1/flags/{id}/vote",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "POST",
+    "route": "/api/v1/flags/{id}/unflag",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "PUT",
+    "route": "/api/v1/admin/flags/{id}/lock",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "DELETE",
+    "route": "/api/v1/admin/flags/{id}",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "GET",
+    "route": "/api/v1/places/saved",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "POST",
+    "route": "/api/v1/places/saved",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "DELETE",
+    "route": "/api/v1/places/saved/{id}",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "GET",
+    "route": "/api/v1/places/routes",
+    "documented": true
+  },
+  {
+    "document": "04_PHASE_4_PLACES_AND_HAZARD_FLAGS.md",
+    "method": "POST",
+    "route": "/api/v1/places/routes",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/walk-in",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/sos",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/tow",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "GET",
+    "route": "/api/v1/dispatch/my-requests",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "GET",
+    "route": "/api/v1/dispatch/provider-feed",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "GET",
+    "route": "/api/v1/dispatch/{id}",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/accept",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/arrive",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/quote",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/approve-quote",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/ready",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/resolve",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/unfixable",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/cancel",
+    "documented": true
+  },
+  {
+    "document": "05_PHASE_5_DISPATCH_AND_ASSIST.md",
+    "method": "POST",
+    "route": "/api/v1/dispatch/{id}/tow-offer",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "GET",
+    "route": "/api/v1/bills/my-bills",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "GET",
+    "route": "/api/v1/bills/{id}",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "POST",
+    "route": "/api/v1/payments/create-sepay-qr",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "POST",
+    "route": "/api/v1/payments/sepay/webhook",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "POST",
+    "route": "/api/v1/payments/choose-cash",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "POST",
+    "route": "/api/v1/payments/confirm-cash",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "GET",
+    "route": "/api/v1/payments/provider-earnings",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "GET",
+    "route": "/api/v1/admin/payouts/pending-items",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "POST",
+    "route": "/api/v1/admin/payouts/create-batch",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "GET",
+    "route": "/api/v1/admin/payouts/batches",
+    "documented": true
+  },
+  {
+    "document": "06_PHASE_6_BILLS_SEPAY_AND_ESCROW.md",
+    "method": "PUT",
+    "route": "/api/v1/admin/payouts/{id}/settle",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "GET",
+    "route": "/api/v1/chat/{scope}/{referenceId}",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "POST",
+    "route": "/api/v1/chat/{scope}/{referenceId}/messages",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "GET",
+    "route": "/api/v1/chat/{scope}/{referenceId}/history",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "POST",
+    "route": "/api/v1/ratings",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "POST",
+    "route": "/api/v1/ratings/{id}/reply",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "GET",
+    "route": "/api/v1/ratings/provider/{providerId}",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "POST",
+    "route": "/api/v1/disputes",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "GET",
+    "route": "/api/v1/disputes/my-disputes",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "GET",
+    "route": "/api/v1/admin/disputes",
+    "documented": true
+  },
+  {
+    "document": "07_PHASE_7_CHAT_RATINGS_DISPUTES_AND_TESTING.md",
+    "method": "PUT",
+    "route": "/api/v1/admin/disputes/{id}/resolve",
+    "documented": true
+  }
+]

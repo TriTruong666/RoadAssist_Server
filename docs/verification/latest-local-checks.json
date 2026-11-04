@@ -1,0 +1,128 @@
+{
+  "generatedAt": "2026-11-04T19:59:09.308Z",
+  "scope": "Both seven-phase roadmaps; local code and acceptance; no commit/push/deploy",
+  "commands": [
+    {
+      "command": "RUN_DB_TESTS=1 npm test",
+      "repo": "server",
+      "passed": 206,
+      "failed": 0,
+      "skipped": 0,
+      "log": "/tmp/roadassist-goal-server-all.log"
+    },
+    {
+      "command": "RUN_MAP_SERVICE_TESTS=1 PLAYWRIGHT_CHANNEL=chrome npm run test:integration",
+      "repo": "client",
+      "passed": 12,
+      "failed": 0,
+      "log": "/tmp/roadassist-goal-browser-integration.log"
+    },
+    {
+      "command": "PLAYWRIGHT_CHANNEL=chrome npm run test:auth",
+      "repo": "client",
+      "passed": 11,
+      "failed": 0,
+      "log": "/tmp/roadassist-auth-check.log"
+    },
+    {
+      "command": "PLAYWRIGHT_CHANNEL=chrome npm run test:integration -- --grep \"hazard consensus\"",
+      "repo": "client",
+      "passed": 1,
+      "failed": 0,
+      "scope": "Final mobile inbox bounds correction plus actual formatted broadcast/read/keyboard interactions",
+      "log": "/tmp/roadassist-alert-responsive-check.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "repo": "client",
+      "result": "pass"
+    },
+    {
+      "command": "npm run lint",
+      "repo": "client",
+      "errors": 0,
+      "warnings": 0,
+      "configurationUnchanged": true,
+      "log": "/tmp/roadassist-client-lint-check.log"
+    },
+    {
+      "command": "npm run build",
+      "repo": "client",
+      "result": "pass",
+      "advisory": "Rich-editor chunk exceeds 500 kB",
+      "log": "/tmp/roadassist-client-build.log"
+    },
+    {
+      "command": "docker build -t roadassist-server:local-audit .",
+      "repo": "server",
+      "result": "pass",
+      "log": "/tmp/roadassist-server-docker-build.log"
+    },
+    {
+      "command": "docker build -t roadassist-client:local-audit .",
+      "repo": "client",
+      "result": "pass",
+      "log": "/tmp/roadassist-client-docker-build.log"
+    },
+    {
+      "command": "Client image bundled API URL and nginx -t",
+      "result": "pass",
+      "log": "/tmp/roadassist-client-image-check.log"
+    },
+    {
+      "command": "Server image native Sharp PNG",
+      "result": "pass",
+      "log": "/tmp/roadassist-server-image-check.log"
+    },
+    {
+      "command": "Docker Compose development, production, routing and client config --quiet",
+      "result": "pass"
+    },
+    {
+      "command": "Parse both workflow YAML files",
+      "result": "pass"
+    }
+  ],
+  "api": {
+    "roadmapContracts": 80,
+    "openApiPaths": 149,
+    "brokenSchemaReferences": 0,
+    "negativeHttpChecks": 80,
+    "expectedUnavailable": "503 SEPAY_MOCK_MODE for real webhook in mock mode"
+  },
+  "fixtures": {
+    "paymentGateway": "mock",
+    "smtpAndS3": "fixture transports",
+    "database": "real isolated PostgreSQL schemas",
+    "redis": "real namespaced Redis",
+    "historyAndTime": "actual seeded chat rows and aged assignment timestamps",
+    "mapPopulation": "1000 actual provider rows",
+    "maps": "real MapTiler geocoding/tiles and real Vietnam Valhalla"
+  },
+  "artifacts": [
+    "../RoadAssist_Client/test-results/roadassist-map-profile-light.png",
+    "../RoadAssist_Client/test-results/roadassist-admin-alerts-desktop.png",
+    "../RoadAssist_Client/test-results/roadassist-admin-alerts-mobile.png"
+  ],
+  "sourceFingerprints": {
+    "src/models/admin_alert.model.js": "d8c934dff7f9d9dc268b3700f36e65112f641235fb32c08eee178b2b9645c240",
+    "src/services/admin_alert.service.js": "4f0b8fd497d8658642307717c709fc218192b5062b0f330721ab8ead0e643b5e",
+    "src/services/setup.service.js": "828e152a7bcaf6cf427821ccf4d1403d49ac57418a75ce830cf42d8ee12b33e2",
+    "src/services/map_tile.service.js": "a84472ab6b320add9b97c22d19260d1df719ff5953f016de207c7890c71069b4",
+    "src/services/platform.service.js": "3bc7a184f701779d92b7def00715d0074fde8a4090c773d5b3caf521dd4c4f12",
+    "src/swagger/platform.swagger.js": "3aaa5c00e7222ddf9ec2c2b37723a804702de0b3afb9a6e481db5f1f74f67049",
+    "scripts/e2e-server.js": "8625f5880c93666cf259af776b760e2654b365c9b190c30ecb98245827eae410",
+    "docker-compose.routing.yml": "35df372a6cd919746b29731efa2bada26488576e33322057152abcb99f3b13ed",
+    ".github/workflows/deploy.yml": "1b181b10c7347de78b60ba55319b3c64dd112be8bff9d20247fd7c0400c77c36",
+    "../RoadAssist_Client/src/App.tsx": "a4f0b7a436d64f454bff3e9cb7bc21f6fded6e2005f6b18e952e3f459aede061",
+    "../RoadAssist_Client/src/pages/OperationsWorkspacePage.tsx": "2d46d2683aeedc8b648a548b58bada91b47748933eb98c3a391603506b83f01f",
+    "../RoadAssist_Client/src/components/dropdowns/OperationsNotificationDropdown.tsx": "0ac400c11ec219df8b74b897a02e5923f21fb874d7b89d0cc4eb39e22dae7a18",
+    "../RoadAssist_Client/src/components/operations/ProvidersPanel.tsx": "e22ef05e3d2f7844eb60893af9bac22de40bdaf88c890f07e258ba51015a3952",
+    "../RoadAssist_Client/src/hooks/use-tiptap-editor.ts": "3d78b2bfae63a169930368801a1d78cf96f1c2217b4f727b8224e3e45aa8a61e",
+    "../RoadAssist_Client/src/hooks/use-throttled-callback.ts": "65cee2b422bef8c3eab23c374dbe2e88bacb9873de77c353346bc174fbfa3c81",
+    "../RoadAssist_Client/eslint.config.js": "4efe97b16d1200fac0eaf07aa00930a8668b1f96a0be1891ace8c1e712ff0ccb",
+    "../RoadAssist_Client/Dockerfile": "a1aa664c51da996e4fd680de945d500011de7a2f99b1f1caf512b14c84b4926d",
+    "../RoadAssist_Client/docker-compose.yml": "d62ad02726d2e2934559076318246fca0c0a1545efb13b2e986b674ef9ae3572",
+    "../RoadAssist_Client/.github/workflows/deploy.yml": "e6efee47cfd65e45d5cce3d7683ad4e791773d82a7cd98651dc8528d6e6c708e"
+  }
+}

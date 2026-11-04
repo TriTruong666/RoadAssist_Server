@@ -174,3 +174,99 @@ The complete provider contract is documented in [docs/PROVIDER_BUSINESS_RULES.md
 ## Handover and disputes
 
 [Handover and dispute rules](docs/HANDOVER_AND_DISPUTES.md) cover two-party condition reports, before/after towing photos, seven-day claims, response deadlines, payout holds, admin rulings and audited refunds/recovery. Swagger exposes participant and admin endpoints.
+
+
+## Browser workspace and platform integration
+
+The client workspace keeps Leaflet mounted while opening operations panels.
+All user roles authenticate with HttpOnly cookies; non-admin accounts complete
+`/setup` before entering the map. Setup status is included in session user DTOs
+and `/users/me`. Provider choices never bypass approval or operational checks.
+
+- `PAYMENT_GATEWAY_MODE=mock` enables explicit synthetic SePay intents and the
+  owner-only `/payments/:id/mock-transfer` action. It still uses the real inbox,
+  escrow, refund and payout ledger. Production rejects mock mode. See `.env.example`.
+- `/ratings` supports participant reviews of completed rescues and target replies.
+- `/admin/announcements` snapshots recipients; `/notifications` acknowledges real
+  user/device delivery. `/users/devices` registers browser UUIDs and never exposes
+  another account’s devices.
+- `/users/payout-account` stores the owner’s destination. Payout batches snapshot
+  the destination; later profile edits do not change existing transfer instructions.
+- `/admin/settings` uses bounded values and revision checks. Existing dispatches
+  retain their original tariff snapshot. `/admin/stats` groups ledger payments and
+  pending/settled payout gross, commission and net.
+- `/admin/disputes/:id/chat` exposes only room versions of that disputed rescue.
+  Ordinary chat membership never grants this administration route.
+
+Run one development server process per port. Keep `DB_FORCE_RESET=false` and
+`DB_RESET=false` for routine startup; a full reset is an explicit one-off operation.
+Set `MAPTILER_API_KEY` for place search and run/configure `VALHALLA_ROUTER_URL`
+for road routing. Neither external provider is replaced with fake map results.
+
+Verification progress and remaining end-to-end requirements are tracked in
+[docs/IMPLEMENTATION_AUDIT.md](docs/IMPLEMENTATION_AUDIT.md). Current full backend
+suite: `RUN_DB_TESTS=1 npm test` (206 passing, zero skipped at the latest run).
+Browser tests start an isolated schema/Redis namespace with actual domain APIs,
+fixture SMTP/S3 transports, and the mock payment gateway; they never reset the
+normal development database.
+
+
+### Local map services
+
+Set `MAPTILER_API_KEY` in the ignored `.env.development`. If the key is restricted
+by HTTP origin, set `MAPTILER_REQUEST_ORIGIN` to a fixed application origin allowed
+by that key (for example `http://127.0.0.1:5173`). The backend supplies that header;
+it never forwards an arbitrary request Origin to MapTiler. Search is scoped to
+Vietnam/VI and accepts an optional validated latitude/longitude proximity pair.
+
+```sh
+npm run infra:routing
+npm run infra:routing:logs
+curl http://localhost:8002/status
+```
+
+The optional `routing` Docker profile uses the official Valhalla scripted image,
+pinned by digest, and real Vietnam OSM data from Geofabrik. First startup downloads
+about 317 MB and builds tiles into `roadassist_valhalla_data`; keep this volume for
+subsequent starts. Container limits are 4 GB and two build/service threads.
+`VALHALLA_PBF_URL` can select another real region. Source configuration:
+[docker-compose.routing.yml](docker-compose.routing.yml), based on
+[Valhalla's Docker instructions](https://github.com/valhalla/valhalla/blob/master/docker/README.md).
+
+A host-run backend uses `VALHALLA_ROUTER_URL=http://localhost:8002/route`. For the
+production compose profile, use `http://valhalla:8002/route` on the shared network.
+The adapter explicitly requests OSRM + GeoJSON, validates the complete geometry,
+and converts distance meters to kilometers. Native Valhalla JSON uses an encoded
+shape and is not treated as GeoJSON. Upstream outages remain structured 503 errors.
+
+```sh
+# Client repo: actual MapTiler + self-hosted Vietnam routing, actual domain DB,
+# fixture SMTP/S3 transports and the explicitly mocked SePay gateway.
+RUN_MAP_SERVICE_TESTS=1 PLAYWRIGHT_CHANNEL=chrome npm run test:integration
+```
+
+
+The active Leaflet basemap also uses MapTiler through authenticated
+`GET /places/tiles/:theme/:z/:x/:y.png`. Tile coordinates/styles are validated;
+the server coalesces requests and keeps at most 256 tiles / 16 MiB, respecting
+upstream no-store/no-cache and capping cache lifetime at one hour. PNG headers
+are checked, errors do not disclose upstream credentials, and HTTP caching is
+private. API keys remain on the server for both geocoding and tiles.
+The previous unauthenticated CARTO URLs returned an API-key placeholder image
+with HTTP 200, so HTTP success alone is not evidence of a rendered basemap.
+
+
+## Durable administration alerts
+
+`GET /api/v1/admin/alerts` returns the current admin's paginated inbox and unread
+count; `POST /api/v1/admin/alerts/:id/read` acknowledges only that admin's copy,
+idempotently. Provider-review transitions, the third community confirmation and
+new disputes create alerts inside their domain transaction. Rolled-back events
+leave no alert or delivery notice. Socket.IO uses the persistent notice outbox as
+a refresh hint; the inbox remains available after reconnect or offline delivery.
+
+The isolated E2E fixture additionally seeds chat history, ages an assignment for
+rematch deadlines, and creates a fixed 1,000-provider PostgreSQL dataset for map
+clustering/filtering/truncation tests. None of its handlers are imported by normal
+startup. The client presents monitor truncation explicitly and links to complete
+paginated administration lists.
