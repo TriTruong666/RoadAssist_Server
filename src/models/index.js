@@ -163,6 +163,9 @@ const {
   RecoveryOffset,
 } = require("./dispute.model");
 module.exports = {
+  AdminAlert: require("./admin_alert.model"),
+  Rating: require("./rating.model"),
+  ...require("./platform.model"),
   Handover,
   Dispute,
   DisputeEvent,
