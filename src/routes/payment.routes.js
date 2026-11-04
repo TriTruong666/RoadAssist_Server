@@ -29,6 +29,9 @@ router.post(
   },
 );
 router.use(protect);
+router.post("/:id/mock-transfer", schema.id, validate, async (req, res) =>
+  R.success(res, await require("../services/mock_payment.service").transfer(req.user, req.validated.id)),
+);
 router.get("/cash-eligibility", async (req, res) =>
   R.success(
     res,
