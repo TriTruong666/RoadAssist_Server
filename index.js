@@ -85,6 +85,7 @@ async function startServer() {
     // Clear only this configured Redis database when an explicit full reset is requested.
     if (config.db.force_reset) await redis.flushdb();
     await runStartupDatabaseMigrations(sequelize);
+    await require("./src/services/platform_settings.service").load();
     await require("./src/seeds/user.seed").seedUsers();
     await initJobs();
     await initCronJobs();
