@@ -5,6 +5,7 @@ const geometry = g => g?.type === 'LineString' && Array.isArray(g.coordinates) &
 const stops = [body('stops').isArray({ min: 2, max: 25 }).custom(v => v.every(point))];
 const costing = body('costing').optional().isIn(['auto','motorcycle','motor_scooter','bicycle','pedestrian']);
 module.exports = {
+ tiles: [param('theme').isIn(['light','dark']), param('z').isInt({ min: 0, max: 19 }).toInt(), ...['x','y'].map(name => param(name).isInt({ min: 0, max: 524287 }).toInt().custom((value,{req}) => value < 2 ** Number(req.params.z)))],
  aliases: (req,res,next) => {
   const queryCopy = { ...req.query };
   Object.defineProperty(req, 'query', { value: queryCopy, configurable: true });
@@ -25,5 +26,5 @@ module.exports = {
  vote: [body('voteType').isIn(['CONFIRM','DENY'])], message: [body('text').isString().trim().isLength({ min: 1, max: 1000 })],
  place: [...coordinates(body), body('name').isString().trim().isLength({ min: 1, max: 120 }), body('address').optional().isString().trim().isLength({ max: 255 }), body('category').optional().isIn(['HOME','WORK','OTHER'])],
  route: [body('name').isString().trim().isLength({ min: 1, max: 120 }), ...stops, body('geometry').custom(geometry), costing],
- solve: [...stops, costing], search: [query('q').isString().trim().isLength({ min: 2, max: 200 })],
+ solve: [...stops, costing], search: [query('q').isString().trim().isLength({ min: 2, max: 200 }).custom((value,{req}) => (req.query.latitude !== undefined) === (req.query.longitude !== undefined)).withMessage('Cần cả vĩ độ và kinh độ để ưu tiên vị trí'), query('latitude').optional().isFloat({ min: -85.05112878, max: 85.05112878 }).toFloat(), query('longitude').optional().isFloat({ min: -180, max: 180 }).toFloat()],
 };

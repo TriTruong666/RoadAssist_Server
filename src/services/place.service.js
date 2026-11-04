@@ -36,10 +36,10 @@ class PlaceService {
   if (!await this.model(routes).destroy({ where: { id, userId: actor.userId } })) throw new NotFoundException();
   return { deleted: true };
  }
- static async search({ q }) {
+ static async search({ q, latitude, longitude }) {
   if (!config.maps.maptilerApiKey) throw upstream();
   try {
-   const { data } = await axios.get(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json`, { params: { key: config.maps.maptilerApiKey, limit: 10 }, timeout: 8000, maxContentLength: 2 * 1024 * 1024 });
+   const { data } = await axios.get(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json`, { params: { key: config.maps.maptilerApiKey, limit: 10, country: 'vn', language: 'vi', ...(latitude !== undefined && longitude !== undefined && { proximity: `${longitude},${latitude}` }) }, headers: config.maps.maptilerRequestOrigin ? { Origin: config.maps.maptilerRequestOrigin } : undefined, timeout: 8000, maxContentLength: 2 * 1024 * 1024 });
    if (!Array.isArray(data.features)) throw upstream();
    return { items: data.features.map(f => ({ id: f.id, name: f.text, address: f.place_name, center: f.center })) };
   } catch { throw upstream(); }
@@ -48,12 +48,14 @@ class PlaceService {
   const flags = await HazardFlag.findAll({ where: { status: { [Op.in]: ['2','3'] }, expiresAt: { [Op.gt]: new Date() } }, order: [['id','ASC']], limit: 101 });
   // Refuse rather than silently omit known danger areas when the upstream polygon budget is exceeded.
   if (flags.length > 100) throw new ConflictException('Quá nhiều vùng cảnh báo để định tuyến an toàn');
-  const payload = { locations: stops.map(p => ({ lat: p.latitude, lon: p.longitude })), costing, shape_format: 'geojson', exclude_polygons: flags.map(ring) };
+  const payload = { locations: stops.map(p => ({ lat: p.latitude, lon: p.longitude })), costing, format: 'osrm', shape_format: 'geojson', exclude_polygons: flags.map(ring) };
   try {
    const { data } = await axios.post(config.maps.valhallaRouterUrl, payload, { timeout: 10000, maxContentLength: 8 * 1024 * 1024 });
-   const legs = data.trip?.legs;
-   if (!Array.isArray(legs) || !legs.length || !legs.every(leg => require('../schemas/place_flag.schema').geometry(leg.shape))) throw upstream();
-   return { geometry: { type: 'LineString', coordinates: legs.flatMap((leg, index) => index ? leg.shape.coordinates.slice(1) : leg.shape.coordinates) }, summary: data.trip.summary, avoidedFlagIds: flags.map(f => f.id), calculatedAt: new Date() };
+   // Valhalla's native JSON response always uses encoded polyline shapes.
+   // GeoJSON shape_format is supported by its OSRM response format.
+   const route = data.routes?.[0];
+   if (data.code !== 'Ok' || !route || !require('../schemas/place_flag.schema').geometry(route.geometry) || !Number.isFinite(route.distance) || route.distance < 0 || !Number.isFinite(route.duration) || route.duration < 0) throw upstream();
+   return { geometry: route.geometry, summary: { length: route.distance / 1000, time: route.duration }, avoidedFlagIds: flags.map(f => f.id), calculatedAt: new Date() };
   } catch { throw upstream(); }
  }
 }
