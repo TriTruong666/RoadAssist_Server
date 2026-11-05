@@ -11,6 +11,7 @@ else {
   const suffix = randomUUID().replaceAll("-", "");
   Object.assign(process.env, {
     NODE_ENV: "test",
+    PAYMENT_GATEWAY_MODE: "live",
     DB_SCHEMA: `billing_test_${suffix}`,
     AUTH_REDIS_PREFIX: `test:${suffix}:auth:`,
     PROVIDER_REDIS_PREFIX: `test:${suffix}:provider:`,
