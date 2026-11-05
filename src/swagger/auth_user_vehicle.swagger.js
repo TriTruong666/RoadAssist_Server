@@ -119,8 +119,10 @@ const schemas = {
     expiresIn: { type: "integer", example: 300 },
     maskedEmail: string(),
   }),
+  ChangePasswordRequest: object({ oldPassword: string({ format: "password", writeOnly: true }), newPassword: string({ format: "password", minLength: 8, writeOnly: true }) }, ["oldPassword", "newPassword"]),
   UpdateProfileRequest: object({
     name: registrationFields.name,
+    phone: registrationFields.phone,
     avatar: string({ format: "uri", nullable: true }),
     webPushToken: string({ nullable: true, maxLength: 255 }),
   }),
@@ -344,11 +346,14 @@ const paths = {
         "Proves email ownership and invalidates every session. Does not depend on the originating IP.",
     }),
   },
+  "/api/v1/auth/change-password": {
+    post: operation("Change own password and rotate authenticated session", "Auth", { input: "ChangePasswordRequest", output: "Session", description: "Requires the current password and an authenticated session. Revokes all old sessions and returns replacement HttpOnly cookies for this browser; tokens are never returned in JSON." }),
+  },
   "/api/v1/users/me": {
     get: operation("Get profile and active vehicle", "Users", {
       output: "Profile",
     }),
-    put: operation("Update display name, avatar or web push token", "Users", {
+    put: operation("Update own name, phone, avatar or web push token", "Users", {
       input: "UpdateProfileRequest",
       output: "Profile",
     }),
@@ -408,3 +413,22 @@ for (const name of ['Vehicle','CreateVehicleRequest','UpdateVehicleRequest']) {
  const schema = schemas[name];
  if (schema?.properties) Object.assign(schema.properties, {length:{type:'number',minimum:0.5,maximum:20,nullable:name==='Vehicle'},weightKg:{type:'number',minimum:20,maximum:50000,nullable:name==='Vehicle'}});
 }
+
+for (const name of ['CreateVehicleRequest', 'UpdateVehicleRequest']) {
+  for (const field of ['baseWidth', 'baseHeight', 'length', 'weightKg']) {
+    if (schemas[name]?.properties[field]) schemas[name].properties[field].nullable = true;
+  }
+}
+const vehiclePhoto = object({ id: uuid(), url: string({ format: 'uri' }) });
+schemas.Vehicle.properties.photo = { ...vehiclePhoto, nullable: true, description: 'Latest owner-uploaded vehicle photo; returned by the vehicle list.' };
+paths['/api/v1/vehicles/{id}/photo'] = {
+  post: operation('Upload or replace an owned vehicle photo', 'Vehicles', {
+    parameters: id,
+    description: 'Multipart file field. Valid JPEG/PNG/WebP up to 5MB; compressed on the server. Ownership and idle vehicle checks run before persistence. A failed upload preserves the previous image.',
+    requestBody: { required: true, content: { 'multipart/form-data': { schema: object({ file: string({ format: 'binary' }) }, ['file']) } } },
+    responses: { 201: { description: 'Saved photo', ...json(envelope(vehiclePhoto)) }, 400: { description: 'Invalid image' }, 404: { description: 'Vehicle not owned by account' }, 409: { description: 'Vehicle busy' }, 503: { description: 'Storage unavailable' } },
+  }),
+};
+paths['/api/v1/users/setup-guide'] = {
+  get: operation('Read current onboarding service fees', 'Users', { description: 'Authenticated read-only fee allowlist: SOS call-out/per-km, TOW base/per-km, waiting/minute and platform commission rate. No bank credentials or private settings are exposed.' }),
+};
