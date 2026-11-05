@@ -9,6 +9,7 @@ const custodyDisputes = require("./custody_dispute.swagger");
 const operations = require("./operations.swagger");
 const billing = require("./billing.swagger");
 const platform = require("./platform.swagger");
+const accounts = require("./admin_accounts.swagger");
 module.exports = swaggerJSDoc({
   definition: {
     openapi: "3.0.0",
@@ -29,6 +30,7 @@ module.exports = swaggerJSDoc({
         ...operations.schemas,
         ...custodyDisputes.schemas,
         ...platform.schemas,
+        ...accounts.schemas,
       },
       securitySchemes: {
         sepayApiKey: { type: "apiKey", in: "header", name: "Authorization" },
@@ -65,6 +67,7 @@ module.exports = swaggerJSDoc({
       ...operations.paths,
       ...custodyDisputes.paths,
       ...platform.paths,
+      ...accounts.paths,
       "/health": {
         get: {
           summary: "Check PostgreSQL and Redis readiness",

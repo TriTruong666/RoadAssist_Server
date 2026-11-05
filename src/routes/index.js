@@ -1,6 +1,7 @@
 const { Router } = require("express");
 const router = Router();
 const v1 = Router();
+v1.use("/admin/accounts", require("./admin_account.routes"));
 v1.use("/admin", require("./platform.routes").admin);
 v1.use("/notifications", require("./platform.routes").notifications);
 v1.use("/ratings", require("./rating.routes"));
