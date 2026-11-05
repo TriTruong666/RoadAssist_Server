@@ -254,7 +254,8 @@ for (const [path, input] of [
   });
   operation("/places/" + path + "/{id}", "delete", "Delete own saved " + path);
 }
-operation("/places/search", "get", "Search MapTiler places in Vietnam", {
+operation("/places/saved/{id}", "put", "Update an owned saved place", { input: "SavedPlaceInput" });
+operation("/places/search", "get", "VietMap v4 address suggestions; resolve selected refId with /places/detail", {
   parameters: [
     { name: "latitude", in: "query", description: "Optional proximity bias; supply longitude together", schema: { type: "number", minimum: -85.05112878, maximum: 85.05112878 } },
     { name: "longitude", in: "query", description: "Optional proximity bias; supply latitude together", schema: { type: "number", minimum: -180, maximum: 180 } },
@@ -265,6 +266,12 @@ operation("/places/search", "get", "Search MapTiler places in Vietnam", {
       schema: { type: "string", minLength: 2, maxLength: 200 },
     },
   ],
+});
+operation("/places/detail", "get", "Resolve a selected VietMap v4 refId into validated coordinates", {
+  parameters: [{ name: "refId", in: "query", required: true, schema: { type: "string", minLength: 1, maxLength: 2048 } }],
+});
+operation("/places/reverse", "get", "Resolve a selected map coordinate into VietMap addresses", {
+  parameters: [{ name: "latitude", in: "query", required: true, schema: { type: "number", minimum: -90, maximum: 90 } }, { name: "longitude", in: "query", required: true, schema: { type: "number", minimum: -180, maximum: 180 } }],
 });
 operation(
   "/places/route",
