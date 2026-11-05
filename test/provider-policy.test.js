@@ -33,3 +33,10 @@ test('private evidence upload recognizes image signatures instead of trusting ex
   assert.equal(detectMime(Buffer.from([255, 216, 255, 224])), 'image/jpeg');
   assert.equal(detectMime(Buffer.from('RIFF0000WEBP')), 'image/webp');
 });
+
+test('evidence PDF detection requires a PDF header and end marker', () => {
+  assert.equal(detectMime(Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n')), 'application/pdf');
+  assert.equal(detectMime(Buffer.from('%PDF-2.0\n%%EOF')), 'application/pdf');
+  assert.equal(detectMime(Buffer.from('%PDF-1.7\ntruncated')), null);
+  assert.equal(detectMime(Buffer.from('<html>fake.pdf</html>')), null);
+});

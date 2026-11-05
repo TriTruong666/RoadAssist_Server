@@ -423,6 +423,34 @@ if (process.env.RUN_DB_TESTS !== '1') {
     assert.equal(approved.actorUserId, admin.userId); assert.ok(approved.reason); assert.equal(approved.after.documents.length, 2);
     assert.equal(JSON.stringify(history).includes(png.toString('base64')), false);
   });
+  test('license and business evidence accept PDFs; vehicle photos and MIME spoofing do not', async () => {
+    const pdfOwner = await client(70);
+    const pdfCar = await vehicle(pdfOwner, 'CAR', '51D76543');
+    const profile = (await ok(pdfOwner, 'POST', '/providers', business('TOW', { vehicleProfileId: pdfCar.id }), 201)).provider;
+    let text = '%PDF-1.7\n';
+    const offsets = [];
+    const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>'];
+    objects.forEach((value, index) => { offsets.push(Buffer.byteLength(text)); text += `${index+1} 0 obj\n${value}\nendobj\n`; });
+    const xref = Buffer.byteLength(text);
+    text += 'xref\n0 4\n0000000000 65535 f \n' + offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('') + `trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    const pdf = Buffer.from(text);
+    const sendPdf = (type, bytes = pdf, mime = 'application/pdf', actor = pdfOwner) => {
+      const form = new FormData(); form.set('documentType', type); form.set('file', new Blob([bytes], { type: mime }), 'license.pdf');
+      return fetch(base + `/api/v1/providers/${profile.id}/documents`, { method:'POST', headers:{Cookie:`road_as_token=${actor.token}`}, body:form });
+    };
+    const response = await sendPdf('LICENSE_PHOTO'); assert.equal(response.status,201);
+    const document = (await response.json()).data.document;
+    assert.equal(document.mimeType,'application/pdf'); assert.equal(document.originalName,'license.pdf'); assert.equal(document.size,pdf.length);
+    assert.deepEqual(s3Fixture.objects.get(document.s3Key),pdf);
+    const uploaded=s3Fixture.calls.find(call => call.Key===document.s3Key);assert.equal(uploaded.ContentType,'application/pdf');
+    assert.equal((await sendPdf('BUSINESS_DOCUMENT')).status,201);
+    assert.equal((await sendPdf('VEHICLE_PHOTO')).status,400);
+    assert.equal((await sendPdf('LICENSE_PHOTO',Buffer.from('fake.pdf'))).status,400);
+    assert.equal((await sendPdf('LICENSE_PHOTO',pdf,'image/png')).status,400);
+    assert.equal((await sendPdf('LICENSE_PHOTO',pdf,'application/pdf',other)).status,404);
+    const content=await fetch(base+`/api/v1/providers/${profile.id}/documents/${document.id}/content`,{headers:{Cookie:`road_as_token=${pdfOwner.token}`},redirect:'manual'});
+    assert.equal(content.status,302);assert.equal(content.headers.get('location'),document.url);
+  });
   test('upload validates image bytes, size, document type and owner authorization', async () => {
     async function rawUpload(actor, bytes, mime, type = 'LICENSE_PHOTO') {
       const form = new FormData(); form.set('documentType', type); form.set('file', new Blob([bytes], { type: mime }), 'test.png');
