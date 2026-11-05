@@ -36,14 +36,17 @@ class PlaceService {
   if (!await this.model(routes).destroy({ where: { id, userId: actor.userId } })) throw new NotFoundException();
   return { deleted: true };
  }
- static async search({ q, latitude, longitude }) {
-  if (!config.maps.maptilerApiKey) throw upstream();
-  try {
-   const { data } = await axios.get(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json`, { params: { key: config.maps.maptilerApiKey, limit: 10, country: 'vn', language: 'vi', ...(latitude !== undefined && longitude !== undefined && { proximity: `${longitude},${latitude}` }) }, headers: config.maps.maptilerRequestOrigin ? { Origin: config.maps.maptilerRequestOrigin } : undefined, timeout: 8000, maxContentLength: 2 * 1024 * 1024 });
-   if (!Array.isArray(data.features)) throw upstream();
-   return { items: data.features.map(f => ({ id: f.id, name: f.text, address: f.place_name, center: f.center })) };
-  } catch { throw upstream(); }
+ static async update(actor, id, data) {
+  return sequelize.transaction(async transaction => {
+   await User.findOne({where:{userId:actor.userId},transaction,lock:transaction.LOCK.UPDATE});
+   const place=await SavedPlace.findOne({where:{id,userId:actor.userId},transaction,lock:transaction.LOCK.UPDATE});
+   if(!place) throw new NotFoundException();
+   await place.update(data,{transaction}); const result=place.toJSON();delete result.userId;return result;
+  });
  }
+ static async search(options) { return { source: 'VIETMAP', items: await require('./vietmap.client').autocomplete(options) }; }
+ static async detail({ refId }) { return require('./vietmap.client').place(refId); }
+ static async reverse(point) { return require('./vietmap.client').reverse(point); }
  static async solve({ stops, costing = 'auto' }) {
   const flags = await HazardFlag.findAll({ where: { status: { [Op.in]: ['2','3'] }, expiresAt: { [Op.gt]: new Date() } }, order: [['id','ASC']], limit: 101 });
   // Refuse rather than silently omit known danger areas when the upstream polygon budget is exceeded.

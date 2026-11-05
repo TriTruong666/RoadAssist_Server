@@ -112,6 +112,8 @@ module.exports = {
     costing,
   ],
   solve: [...stops, costing],
+  detail: [query("refId").isString().trim().isLength({ min: 1, max: 2048 })],
+  reverse: coordinates(query),
   search: [
     query("q")
       .isString()
