@@ -20,12 +20,14 @@ test('hazard exclusion polygons are closed, spherical and correct near poles/dat
   }
  }
 });
-test('Phase 4 Swagger exposes twenty-one operations including authenticated binary map tiles', () => {
+test('Phase 4 Swagger exposes place detail/reverse and legacy authenticated map tiles', () => {
  const spec=require('../src/config/places_flags.swagger');
  const tile = spec.paths['/api/v1/places/tiles/{theme}/{z}/{x}/{y}.png'].get;
  assert.deepEqual(tile.security,[{cookieAuth:[]}]);
  assert.equal(tile.responses[200].content['image/png'].schema.format,'binary');
- assert.equal(Object.values(spec.paths).reduce((n,p)=>n+Object.keys(p).length,0),21);
+ assert.equal(Object.values(spec.paths).reduce((n,p)=>n+Object.keys(p).length,0),24);
+ assert.deepEqual(spec.paths['/api/v1/places/detail'].get.security,[{cookieAuth:[]}]);
+ assert.deepEqual(spec.paths['/api/v1/places/reverse'].get.security,[{cookieAuth:[]}]);
  assert.deepEqual(spec.paths['/api/v1/flags/nearby'].get.security,[]);
  assert.deepEqual(spec.paths['/api/v1/flags'].post.security,[{cookieAuth:[]}]);
  assert.equal(spec.paths['/api/v1/flags'].post.requestBody.content['multipart/form-data'].schema.allOf[1].properties.images.maxItems,3);

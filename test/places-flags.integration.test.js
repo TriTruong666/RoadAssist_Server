@@ -150,8 +150,14 @@ if (process.env.RUN_DB_TESTS !== '1') {
  });
  test('routing sends only current confirmed polygons; upstream failures stay structured and saved geometry needs no routing call', async t => {
   const flag=await create({radiusMeters:100});await Flag.update({status:'2'},{where:{id:flag.id}});
-  const config=require('../src/config/app.config'); const oldKey=config.maps.maptilerApiKey; const oldOrigin=config.maps.maptilerRequestOrigin; config.maps.maptilerApiKey='test-key'; config.maps.maptilerRequestOrigin='http://127.0.0.1:5173';
-  t.mock.method(axios,'get',async(url,options)=>{assert.equal(options.headers.Origin,'http://127.0.0.1:5173'); assert.equal(options.params.country,'vn'); assert.equal(options.params.language,'vi'); assert.equal(options.params.proximity,'106.69,10.77'); return {data:{features:[{id:'1',text:'Test',place_name:'Test address',center:[106.69,10.77]}]}}; });
+  const config=require('../src/config/app.config'); const oldKey=config.maps.vietmapApiToken; config.maps.vietmapApiToken='private-vietmap-fixture';
+  t.mock.method(axios,'get',async(url,options)=>{
+   assert.equal(options.params.apikey,'private-vietmap-fixture');
+   if(url.endsWith('/api/autocomplete/v4')) { assert.equal(options.params.display_type,6); assert.equal(options.params.focus,'10.77,106.69'); return {data:[{ref_id:'fixture-ref',name:'Test',address:'Test address',display:'Test, HCM',distance:0.3}]}; }
+   if(url.endsWith('/api/place/v4')) { assert.equal(options.params.refid,'fixture-ref'); return {data:{name:'Test',address:'Test address',lat:10.77,lng:106.69}}; }
+   if(url.endsWith('/api/reverse/v4')) return {data:[{ref_id:'fixture-ref',name:'Test',address:'Test address'}]};
+   throw new Error('Unexpected VietMap endpoint');
+  });
   t.mock.method(axios,'post',async(url,body)=>{
    assert.ok(body.exclude_polygons.length>=1);assert.equal(body.shape_format,'geojson'); assert.equal(body.format,'osrm');
    assert.ok(body.exclude_polygons.every(r=>r.length===17&&r[0][0]===r[16][0]));
@@ -159,11 +165,35 @@ if (process.env.RUN_DB_TESTS !== '1') {
   });
   try {
    assert.equal((await request(owner,'GET','/places/search?q=Saigon&latitude=10.77&longitude=106.69')).items[0].name,'Test');
+   const detail=await request(owner,'GET','/places/detail?refId=fixture-ref'); assert.deepEqual(detail.center,[106.69,10.77]);
+   assert.equal((await request(owner,'GET','/places/reverse?latitude=10.77&longitude=106.69')).items[0].address,'Test address');
+   await request(owner,'GET','/places/detail?refId=',undefined,400);
+
    const solved=await request(owner,'POST','/places/route',{stops:[origin,{latitude:10.78,longitude:106.7}]});assert.ok(solved.avoidedFlagIds.includes(flag.id));
    axios.post.mock.mockImplementation(async()=>{throw new Error('private upstream secret');});
    await request(owner,'POST','/places/route',{stops:[origin,origin]},503);
    await request(owner,'POST','/places/routes',{name:'Cached',stops:[origin,origin],geometry:solved.geometry},201);
-  }finally{config.maps.maptilerApiKey=oldKey;config.maps.maptilerRequestOrigin=oldOrigin;}
+  }finally{config.maps.vietmapApiToken=oldKey;}
+ });
+ test('saved place edits preserve ownership and reject foreign updates', async () => {
+  const place=await request(owner,'POST','/places/saved',{name:'Before edit',latitude:10.77,longitude:106.69,category:'HOME'},201);
+  const edited=await request(owner,'PUT',`/places/saved/${place.id}`,{name:'After edit',address:'Updated address',latitude:10.77,longitude:106.69,category:'HOME'});
+  assert.equal(edited.name,'After edit');assert.equal(edited.category,'HOME');assert.equal(edited.userId,undefined);
+  await request(users[0],'PUT',`/places/saved/${place.id}`,{name:'Foreign edit',latitude:10.77,longitude:106.69},404);
+ });
+ test('VietMap failures and missing coordinates never leak tokens or invent a map point', async t => {
+  const config=require('../src/config/app.config'); const oldKey=config.maps.vietmapApiToken; config.maps.vietmapApiToken='private-vietmap-fixture';
+  t.mock.method(axios,'get',async()=>({data:{name:'Missing coordinates',lat:null,lng:null}}));
+  try {
+   await request(owner,'GET','/places/detail?refId=bad-place',undefined,503);
+   axios.get.mock.mockImplementation(async()=>({data:{lat:true,lng:false}}));
+   await request(owner,'GET','/places/detail?refId=bad-types',undefined,503);
+   axios.get.mock.mockImplementation(async()=>{throw new Error('private-vietmap-fixture');});
+   const response=await fetch(base+'/api/v1/places/search?q=Saigon',{headers:{Cookie:`road_as_token=${owner.token}`}});
+   assert.equal(response.status,503);assert.ok(!(await response.text()).includes('private-vietmap-fixture'));
+   config.maps.vietmapApiToken=null;
+   await request(owner,'GET','/places/search?q=Saigon',undefined,503);
+  }finally{config.maps.vietmapApiToken=oldKey;}
  });
  test('authenticated map tiles validate coordinates, share bounded cache and hide upstream credentials', async t => {
   const config = require('../src/config/app.config'); const oldKey = config.maps.maptilerApiKey; const oldOrigin = config.maps.maptilerRequestOrigin;
