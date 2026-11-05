@@ -28,9 +28,30 @@ router.post(
     );
   },
 );
+router.post("/sepay/ipn", async (req, res) => {
+  const Gateway = require("../services/sepay_gateway.service");
+  Gateway.authenticate(req);
+  await Gateway.ipn(req.body);
+  return res.status(200).json({ success: true });
+});
 router.use(protect);
+router.post("/:id/gateway-sync", schema.id, validate, async (req, res) =>
+  R.success(
+    res,
+    await require("../services/sepay_gateway.service").sync(
+      req.user,
+      req.validated.id,
+    ),
+  ),
+);
 router.post("/:id/mock-transfer", schema.id, validate, async (req, res) =>
-  R.success(res, await require("../services/mock_payment.service").transfer(req.user, req.validated.id)),
+  R.success(
+    res,
+    await require("../services/mock_payment.service").transfer(
+      req.user,
+      req.validated.id,
+    ),
+  ),
 );
 router.get("/cash-eligibility", async (req, res) =>
   R.success(

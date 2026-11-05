@@ -23,8 +23,19 @@ class Payments {
       .toString()
       .padStart(20, "0")}`;
   }
-  static bank() {
-    if (config.mode === "mock") return { mock: true, accountNumber: "MOCK-ACCOUNT", bankCode: "MOCK", gatewayName: "ROADASSIST_MOCK", accountName: "Road Assist Simulation", subAccount: "", transferPrefix: "MOCK" };
+  static bank(forceMock = false) {
+    if (!forceMock && config.mode === "sandbox")
+      return require("./sepay_gateway.service").bank();
+    if (forceMock || config.mode === "mock")
+      return {
+        mock: true,
+        accountNumber: "MOCK-ACCOUNT",
+        bankCode: "MOCK",
+        gatewayName: "ROADASSIST_MOCK",
+        accountName: "Road Assist Simulation",
+        subAccount: "",
+        transferPrefix: "MOCK",
+      };
     if (
       !config.accountNumber ||
       !config.bankCode ||
@@ -53,9 +64,25 @@ class Payments {
       receivedAmount: intent.receivedAmount,
       code: intent.code,
       expiresAt: intent.expiresAt,
-      mode: intent.bankSnapshot?.mock ? "mock" : "live",
+      mode: intent.bankSnapshot?.mock
+        ? "mock"
+        : intent.bankSnapshot?.environment === "sandbox"
+          ? "sandbox"
+          : "live",
       payments,
     };
+    if (
+      intent.method === "SEPAY" &&
+      intent.bankSnapshot?.adapter === "checkout"
+    ) {
+      if (
+        intent.status === "PENDING" &&
+        new Date(intent.expiresAt) > new Date() &&
+        config.mode === "sandbox"
+      )
+        result.checkout = require("./sepay_gateway.service").checkout(intent);
+      return result;
+    }
     if (intent.method === "SEPAY") {
       const bank = intent.bankSnapshot;
       const des = [bank.transferPrefix, intent.code].filter(Boolean).join(" ");
@@ -79,7 +106,11 @@ class Payments {
     const snapshot = await Bill.findByPk(data.billId);
     if (!snapshot || snapshot.userId !== actor.userId)
       fail("BILL_NOT_FOUND", "Không tìm thấy hóa đơn", 404);
-    const bank = method === "SEPAY" ? this.bank() : {};
+    const demoSeed =
+      context.demoSeed === true &&
+      !require("../config/app.config").app.isProduction &&
+      actor.email?.endsWith("@demo.roadassist.test");
+    const bank = method === "SEPAY" ? this.bank(demoSeed) : {};
     const bps = Bills.bps();
     const fingerprint = createHash("sha256")
       .update(

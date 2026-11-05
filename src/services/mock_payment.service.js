@@ -5,8 +5,11 @@ const Payments = require("./payment.service");
 const Sepay = require("./sepay.service");
 const Policy = require("./dispatch_policy.service");
 module.exports = {
-  async transfer(actor, id) {
-    if (config.sepay.mode !== "mock" || config.app.isProduction)
+  async transfer(actor, id, options = {}) {
+    const demoSeed =
+      options.demoSeed === true &&
+      actor.email?.endsWith("@demo.roadassist.test");
+    if ((!demoSeed && config.sepay.mode !== "mock") || config.app.isProduction)
       Policy.fail("MOCK_PAYMENT_DISABLED", "Mô phỏng thanh toán đang tắt", 403);
     const intent = await PaymentIntent.findByPk(id);
     if (!intent || intent.userId !== actor.userId)
