@@ -10,6 +10,7 @@ mock.method(client,'send',async command=>{
  calls.push(command);
  if(command.constructor.name==='DeleteObjectCommand'){objects.delete(command.input.Key);return{};}
  if(command.constructor.name==='DeleteObjectsCommand'){for(const o of command.input.Delete.Objects)objects.delete(o.Key);return{};}
+ if(command.constructor.name==='GetObjectCommand'){const value=objects.get(command.input.Key);if(!value)throw new Error('Missing fixture object');return {Body:require('node:stream').Readable.from([value]),ContentLength:value.length};}
  if(command.constructor.name==='HeadObjectCommand'){if(!objects.has(command.input.Key)){const e=new Error('Not found');e.name='NotFound';throw e;}return{ContentLength:objects.get(command.input.Key).length};}
  throw new Error('Unexpected S3 test command');
 });

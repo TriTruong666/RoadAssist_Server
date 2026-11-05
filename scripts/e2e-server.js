@@ -45,6 +45,7 @@ require("../src/config/s3.config").send = async (command) => {
     for (const item of command.input.Delete.Objects) objects.delete(item.Key);
     return {};
   }
+  if (command.constructor.name === "GetObjectCommand") { const value = objects.get(command.input.Key); if (!value) throw new Error("Missing fixture object"); return { Body: require("node:stream").Readable.from([value.body]), ContentLength: value.body.length }; }
   throw new Error("Unexpected S3 fixture operation");
 };
 const Mail = require("../src/services/mail.service");
