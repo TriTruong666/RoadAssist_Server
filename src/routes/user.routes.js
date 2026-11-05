@@ -8,6 +8,7 @@ router.post('/devices', schema.device, validate, controller.registerDevice);
 router.get('/devices', controller.devices);
 router.get('/payout-account', controller.payoutAccount);
 router.put('/payout-account', schema.payout, validate, controller.savePayoutAccount);
+router.get("/setup-guide", controller.setupGuide);
 router.get("/me", controller.me);
 router.put("/me", schema.update, validate, controller.update);
 router.put("/onboard", schema.onboard, validate, controller.onboard);

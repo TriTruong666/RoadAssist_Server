@@ -17,6 +17,7 @@ module.exports = {
     body("accountName").isString().trim().isLength({ min: 2, max: 120 }),
   ],
   update: [
+    body("phone").optional().isString().bail().customSanitizer(value => value.replace(/[\s().-]/g, "")).matches(/^\+?\d{9,15}$/),
     body("name")
       .optional()
       .isString()

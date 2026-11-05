@@ -2,7 +2,7 @@ const sequelize = require("../config/postgres.config");
 const { User, VehicleProfile, VehicleRideConfig } = require("../models");
 const AuthService = require("./auth.service");
 const VehicleService = require("./vehicle.service");
-const { NotFoundException } = require("../common/exceptions/BaseException");
+const { NotFoundException, ForbiddenException, ConflictException } = require("../common/exceptions/BaseException");
 const errors = require("../common/exceptions/error_codes");
 class UserService {
   static async me(userId) {
@@ -30,6 +30,8 @@ class UserService {
   static async onboard(userId, data, context) {
     return sequelize.transaction(async (transaction) => {
       const user = await VehicleService.lockUser(userId, transaction);
+      if (user.role === "admin") throw new ForbiddenException("Admin không sử dụng luồng thiết lập tài khoản");
+      if (user.onboarded) throw new ConflictException("Tài khoản đã hoàn tất thiết lập");
       const requestedServices = [
         ...new Set([
           "RIDER",
