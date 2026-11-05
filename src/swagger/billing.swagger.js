@@ -62,7 +62,11 @@ const schemas = {
       payoutAmount: amount,
       cashCommissionOutstanding: amount,
       ticketId: uuid,
-      canConfirmCash: { type: "boolean", description: "Present on provider earnings rows; true only for an owned pending CASH payment whose rescue is at handover or a terminal settlement stage. Server rechecks on confirmation." },
+      canConfirmCash: {
+        type: "boolean",
+        description:
+          "Present on provider earnings rows; true only for an owned pending CASH payment whose rescue is at handover or a terminal settlement stage. Server rechecks on confirmation.",
+      },
     },
   },
   PaymentCreate: {
@@ -87,6 +91,17 @@ const schemas = {
       status: { type: "string" },
       amount,
       receivedAmount: amount,
+      mode: { type: "string", enum: ["mock", "sandbox", "live"] },
+      checkout: {
+        type: "object",
+        description:
+          "Pending sandbox intents only. Submit these server-signed fields as an HTML form in insertion order. Redirects do not confirm payment.",
+        properties: {
+          url: { type: "string", format: "uri" },
+          method: { type: "string", enum: ["POST"] },
+          fields: { type: "object", additionalProperties: { type: "string" } },
+        },
+      },
       expiresAt: { type: "string", format: "date-time", nullable: true },
       bank: {
         type: "object",
@@ -260,6 +275,49 @@ op(
   { list: true },
 );
 op("/payments/{id}", "get", "Rider polls a reconciled payment intent");
+op(
+  "/payments/{id}/gateway-sync",
+  "post",
+  "Owner verifies sandbox payment against SePay API; returns verified, reason and payment",
+);
+paths["/api/v1/payments/sepay/ipn"] = {
+  post: {
+    tags: ["Payments"],
+    summary:
+      "Sandbox Gateway IPN; verify authoritative order before applying ledger entries",
+    description:
+      "Configure a public HTTPS URL in SePay. X-Secret-Key must match SEPAY_IPN_SECRET (fallback SEPAY_WEBHOOK_TOKEN). Separate from the merchant signing key. ORDER_PAID is reconciled against the sandbox API; TRANSACTION_VOID is queued for financial review. Maximum JSON size 64 KiB.",
+    security: [{ sepaySecretHeader: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["notification_type", "order"],
+            properties: {
+              notification_type: {
+                type: "string",
+                enum: ["ORDER_PAID", "TRANSACTION_VOID"],
+              },
+              order: { type: "object" },
+              transaction: { type: "object" },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "Verified and applied idempotently, or void queued for review",
+      },
+      401: { description: "Invalid IPN secret" },
+      409: { description: "Mismatch or upstream payment not verified" },
+      503: { description: "Sandbox unavailable or configuration invalid" },
+    },
+  },
+};
 op(
   "/payments/{id}/cancel",
   "post",
