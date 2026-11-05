@@ -605,7 +605,7 @@ else {
     });
     assert.equal(
       (await request(applicant, "GET", "/users/me")).setup.required,
-      true,
+      false,
     );
     const application = await Provider.create({
       userId: applicant.userId,
@@ -637,7 +637,7 @@ else {
     await user.update({ requestedServices: ["RIDER", "SHOP", "TOW"] });
     assert.equal(
       (await request(applicant, "GET", "/users/me")).setup.required,
-      true,
+      false,
     );
     await user.update({
       onboarded: false,

@@ -124,6 +124,29 @@ if (!enabled) {
     assert.equal(me.activeVehicle.rideConfig.width, 0.7);
     for (const field of ['password', 'sessionVersion', 'trustedIpRecords', 'loginIp']) assert.equal(me[field], undefined);
   });
+  test('optional vehicle specs, owned photo uploads and setup pricing', async () => {
+    const created = await ok('POST', '/vehicles', { type: 'CAR', plateNumber: '51C-88001', brand: 'Isuzu', modelName: 'Tow', baseWidth: null, baseHeight: null, length: null, weightKg: null }, rider.token, 201);
+    assert.equal(created.baseWidth, 1.9); assert.equal(created.baseHeight, 1.5);
+    assert.equal(created.length, null); assert.equal(created.weightKg, null);
+    await ok('PUT', `/vehicles/${created.id}`, { length: 5, weightKg: 3000 }, rider.token);
+    const cleared = await ok('PUT', `/vehicles/${created.id}`, { length: null, weightKg: null }, rider.token);
+    assert.equal(cleared.length, null); assert.equal(cleared.weightKg, null);
+    const photo = await require('sharp')({ create: { width: 24, height: 24, channels: 3, background: '#ef7d32' } }).png().toBuffer();
+    const uploadPhoto = async token => {
+      const body = new FormData(); body.append('file', new Blob([photo], { type: 'image/png' }), 'vehicle.png');
+      const response = await fetch(base + `/api/v1/vehicles/${created.id}/photo`, { method: 'POST', headers: { Cookie: `road_as_token=${token}` }, body });
+      return { status: response.status, body: await response.json() };
+    };
+    const result = await uploadPhoto(rider.token); assert.equal(result.status, 201, JSON.stringify(result.body));
+    const items = await ok('GET', '/vehicles', undefined, rider.token);
+    assert.equal(items.find(row => row.id === created.id).photo.id, result.body.data.id);
+    const otherAccount = await registerUser(details(991));
+    assert.equal((await uploadPhoto(otherAccount.token)).status, 404);
+    const pricing = await ok('GET', '/users/setup-guide', undefined, rider.token);
+    assert.equal(pricing.pricing.towBaseFee, Number(config.dispatch.towBaseFee));
+    assert.equal(pricing.pricing.commissionRate, Number(config.sepay.commissionRate));
+    assert.deepEqual(Object.keys(pricing), ['pricing']);
+  });
   test('ownership, vehicle dimensions, aliases and load configuration are enforced', async () => {
     other = await registerUser(details(2));
     for (const [method, path, body] of [ ['PUT', `/vehicles/${vehicle.id}`, { brand: 'Attack' }], ['DELETE', `/vehicles/${vehicle.id}`], ['PUT', '/users/active-vehicle', { vehicleId: vehicle.id }] ]) {
@@ -163,7 +186,27 @@ if (!enabled) {
     assert.deepEqual(rider.user.requestedServices, ['RIDER', 'MOBILE_SHOP']);
     assert.deepEqual(rider.user.services, ['RIDER']);
     assert.equal(rider.user.onboarded, true);
+    assert.equal((await request('PUT', '/users/onboard', { services: ['RIDER'] }, rider.token)).status, 409);
     assert.equal((await ok('GET', '/users/me', undefined, rider.token)).role, 'guest');
+  });
+  test('settings update own phone and password; rotation preserves current login and revokes old sessions', async () => {
+    const user = await User.create({ ...details(66), onboarded: true, emailVerifiedAt: new Date() });
+    const first = await Auth.issueSession(user, {});
+    const second = await Auth.issueSession(user, {});
+    const updated = await ok('PUT', '/users/me', { name: 'Settings user', phone: '0906666666', role: 'admin' }, first.token);
+    assert.equal(updated.phone, '0906666666');
+    assert.equal(updated.role, 'guest');
+    assert.equal((await request('POST', '/auth/change-password', { oldPassword: password, newPassword: 'Changed-password-123!' })).status, 401);
+    const invalid = await request('POST', '/auth/change-password', { oldPassword: 'wrong-password', newPassword: 'Changed-password-123!' }, first.token);
+    assert.equal(invalid.status, 400);
+    assert.equal(invalid.body.error_code, 'AUTH_CURRENT_PASSWORD_INVALID');
+    assert.equal((await request('POST', '/auth/change-password', { oldPassword: password, newPassword: 'short' }, first.token)).status, 400);
+    const rotated = await ok('POST', '/auth/change-password', { oldPassword: password, newPassword: 'Changed-password-123!' }, first.token);
+    assert.ok(rotated.token); assert.ok(rotated.refreshToken);
+    assert.equal((await request('GET', '/users/me', undefined, first.token)).status, 401);
+    assert.equal((await request('GET', '/users/me', undefined, second.token)).status, 401);
+    assert.equal((await request('GET', '/users/me', undefined, rotated.token)).status, 200);
+    assert.equal(await (await user.reload()).comparePassword('Changed-password-123!'), true);
   });
   test('register provider validates kind and grants only expected role/services', async () => {
     assert.equal((await request('POST', '/auth/register-provider', { ...details(3), providerKind: 'ADMIN' })).status, 400);
@@ -445,24 +488,31 @@ if (!enabled) {
     assert.deepEqual(user.services, ['RIDER']);
     assert.equal(user.role, 'guest');
   });
-  test('JSON seeds preserve operator workflow without granting provider permissions or silently verifying email', async t => {
+  test('account seed rejects customer/provider records and only creates one verified admin', async t => {
     const fs = require('node:fs');
-    const originalExists = fs.existsSync;
     const originalRead = fs.readFileSync;
-    const records = [
-      { ...details(31), role: 'provider', services: ['RIDER', 'TOW'] },
-      { ...details(32), role: 'provider', services: ['RIDER', 'MOBILE_SHOP'], emailVerified: true },
-    ];
-    t.mock.method(fs, 'existsSync', path => String(path).endsWith('user_seed.json') ? true : originalExists(path));
+    const envKeys = ['ADMIN_SEED_EMAIL', 'ADMIN_SEED_PASSWORD', 'ADMIN_SEED_PHONE'];
+    const originalEnv = Object.fromEntries(envKeys.map(key => [key, process.env[key]]));
+    envKeys.forEach(key => delete process.env[key]);
+    let records = [{ ...details(31), role: 'provider' }];
     t.mock.method(fs, 'readFileSync', (path, ...args) => String(path).endsWith('user_seed.json') ? JSON.stringify(records) : originalRead(path, ...args));
-    await require('../src/seeds/user.seed').seedUsers();
-    const pending = await User.findOne({ where: { email: details(31).email } });
-    const trusted = await User.findOne({ where: { email: details(32).email } });
-    assert.equal(pending.role, 'guest');
-    assert.deepEqual(pending.services, ['RIDER']);
-    assert.deepEqual(pending.requestedServices, ['RIDER', 'TOW']);
-    assert.equal(pending.emailVerifiedAt, null);
-    assert.ok(trusted.emailVerifiedAt);
+    try {
+      const { seedUsers } = require('../src/seeds/user.seed');
+      await assert.rejects(seedUsers, /exactly one admin/);
+      records = [{ ...details(31), role: 'admin' }, { ...details(32), role: 'admin' }];
+      await assert.rejects(seedUsers, /exactly one admin/);
+      records = [{ ...details(31), role: 'admin' }];
+      const [admin] = await seedUsers();
+      assert.equal(admin.role, 'admin');
+      assert.equal(admin.onboarded, true);
+      assert.ok(admin.emailVerifiedAt);
+      assert.equal((await seedUsers())[0].userId, admin.userId);
+      const session = await Auth.issueSession(admin, {});
+      assert.equal((await request('PUT', '/users/onboard', { services: ['RIDER'] }, session.token)).status, 403);
+      assert.equal((await request('POST', '/providers', { kind: 'SHOP', name: 'Admin shop', phone: admin.phone, address: 'Test', latitude: 10.77, longitude: 106.7, capabilities: ['TYRE_REPAIR'], serviceSegments: ['SOLO_BIKE'], supportedVehicleTypes: ['BIKE'] }, session.token)).status, 403);
+    } finally {
+      for (const key of envKeys) if (originalEnv[key] === undefined) delete process.env[key]; else process.env[key] = originalEnv[key];
+    }
   });
 
   test('login sets scoped HttpOnly cookies; access headers and legacy cookie names cannot authenticate', async () => {
