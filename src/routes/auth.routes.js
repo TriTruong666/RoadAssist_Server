@@ -2,6 +2,8 @@ const router = require("express").Router();
 const controller = require("../controllers/auth.controller");
 const schema = require("../schemas/auth.schema");
 const validate = require("../middlewares/validate.middleware");
+const { protect } = require("../middlewares/auth.middleware");
+router.post("/change-password", protect, schema.changePassword, validate, controller.changePassword);
 router.post("/register", schema.register, validate, controller.register);
 router.post(
   "/register-provider",

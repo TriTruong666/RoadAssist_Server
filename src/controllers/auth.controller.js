@@ -11,6 +11,10 @@ const {
 const { UnauthorizedException } = require("../common/exceptions/BaseException");
 const errors = require("../common/exceptions/error_codes");
 module.exports = {
+  async changePassword(req, res) {
+    const session = await AuthService.changePassword(req.user, req.validated, requestContext(req));
+    return Response.success(res, setSessionCookies(res, session));
+  },
   register: async (req, res) =>
     Response.created(
       res,

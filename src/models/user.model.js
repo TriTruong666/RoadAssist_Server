@@ -62,6 +62,11 @@ const User = sequelize.define(
       defaultValue: false,
       allowNull: false,
     },
+    approved: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+    },
     activeVehicleId: {
       type: DataTypes.UUID,
       allowNull: true,
@@ -147,6 +152,7 @@ User.prototype.toJSON = function () {
     "emailVerifiedAt",
     "status",
     "onboarded",
+    "approved",
     "activeVehicleId",
     "webPushToken",
     "createdAt",

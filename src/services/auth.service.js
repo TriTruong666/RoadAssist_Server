@@ -10,6 +10,7 @@ const RateLimit = require("./login_rate_limit.service");
 const Verification = require("./email_verification.service");
 const {
   BaseException,
+  BadRequestException,
   UnauthorizedException,
   ConflictException,
 } = require("../common/exceptions/BaseException");
@@ -344,6 +345,22 @@ class AuthService {
       message:
         "Nếu tài khoản tồn tại, mã đặt lại mật khẩu sẽ được gửi qua email.",
     };
+  }
+  static async changePassword(actor, data, context) {
+    return sequelize.transaction(async transaction => {
+      const user = await User.findOne({ where: { userId: actor.userId }, transaction, lock: transaction.LOCK.UPDATE });
+      this.assertUser(user, actor.sessionVersion);
+      await RateLimit.assertAllowed({ email: user.email, ...context });
+      if (!await user.comparePassword(data.oldPassword)) {
+        await RateLimit.recordFailure({ email: user.email, ...context });
+        throw new BadRequestException({ code: "AUTH_CURRENT_PASSWORD_INVALID", message: "Mật khẩu hiện tại không chính xác", statusCode: 400 });
+      }
+      await RateLimit.clearAccountFailures({ email: user.email, ...context });
+      if (data.oldPassword === data.newPassword) throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại");
+      await user.update({ password: data.newPassword }, { transaction });
+      await AuthSession.update({ revokedAt: new Date() }, { where: { userId: user.userId, revokedAt: null }, transaction });
+      return this.issueSession(user, context, transaction);
+    });
   }
   static async resetPassword(data, context) {
     const verified = await Verification.verifyChallenge({

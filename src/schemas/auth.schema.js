@@ -33,6 +33,10 @@ const register = () => [
     .matches(/^\+?\d{9,15}$/),
 ];
 module.exports = {
+  changePassword: [
+    body("oldPassword").isString().bail().notEmpty().custom(value => Buffer.byteLength(value) <= 72),
+    body("newPassword").isString().bail().isLength({ min: 8 }).custom(value => Buffer.byteLength(value) <= 72),
+  ],
   register: register(),
   registerProvider: [...register(), body("providerKind").isIn(PROVIDER_KINDS)],
   login: [
