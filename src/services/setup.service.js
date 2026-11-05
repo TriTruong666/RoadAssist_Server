@@ -29,14 +29,7 @@ module.exports = {
       .filter((profile) => !["DENIED", "REVOKED"].includes(profile.status))
       .map((profile) => profile.kind);
     return {
-      required:
-        !user.onboarded ||
-        // A reviewed or withdrawn application is still a completed setup.
-        // Keep the map and owner repair/resubmission controls accessible; grants
-        // continue to depend on approved profiles in ProviderAccessService.
-        requestedProviderKinds.some(
-          (kind) => !profiles.some((profile) => profile.kind === kind),
-        ),
+      required: !user.onboarded,
       requestedProviderKinds,
       providerKinds,
       hasActiveVehicle: Boolean(activeVehicle),
