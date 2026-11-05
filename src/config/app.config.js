@@ -43,6 +43,9 @@ module.exports = {
       : false,
     isProduction: process.env.NODE_ENV === "production",
   },
+  seeds: {
+    demo: boolean("SEED_DEMO_DATA"),
+  },
   db: {
     host: process.env.DB_HOST || "localhost",
     port: integer("DB_PORT", 5432),
@@ -96,9 +99,15 @@ module.exports = {
     from: process.env.MAIL_FROM || null,
   },
   sepay: {
-    mode: process.env.PAYMENT_GATEWAY_MODE || (["production", "test"].includes(process.env.NODE_ENV) ? "live" : "mock"),
+    mode:
+      process.env.PAYMENT_GATEWAY_MODE ||
+      (["production", "test"].includes(process.env.NODE_ENV) ? "live" : "mock"),
     apiUrl: process.env.SEPAY_API_URL || "https://my.sepay.vn/userapi",
     apiKey: process.env.SEPAY_API_KEY || null,
+    merchantId: process.env.SEPAY_MERCHANT_ID || null,
+    secretKey: process.env.SEPAY_SECRET_KEY || null,
+    ipnSecret: process.env.SEPAY_IPN_SECRET || process.env.SEPAY_WEBHOOK_TOKEN || null,
+    returnBaseUrl: process.env.SEPAY_RETURN_BASE_URL || null,
     accountNumber: process.env.SEPAY_ACCOUNT_NUMBER || null,
     bankCode: process.env.SEPAY_BANK_CODE || null,
     webhookToken: process.env.SEPAY_WEBHOOK_TOKEN || null,
@@ -114,6 +123,9 @@ module.exports = {
     commissionRate: Number(process.env.PLATFORM_COMMISSION_RATE ?? 0.1),
   },
   maps: {
+    vietmapBaseUrl: process.env.VIETMAP_BASE_URL || "https://maps.vietmap.vn",
+    vietmapApiToken: process.env.VIETMAP_API_TOKEN || null,
+    vietmapTimeoutMs: integer("VIETMAP_TIMEOUT_MS", 10000),
     vietmapApiToken: process.env.VIETMAP_API_TOKEN || null,
     maptilerApiKey: process.env.MAPTILER_API_KEY || null,
     maptilerRequestOrigin: process.env.MAPTILER_REQUEST_ORIGIN || null,
