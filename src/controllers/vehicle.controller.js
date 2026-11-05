@@ -1,6 +1,7 @@
 const Service = require("../services/vehicle.service");
 const Response = require("../common/response.handler");
 module.exports = {
+  uploadPhoto: async (req, res) => Response.created(res, await Service.uploadPhoto(req.user.userId, req.validated.id, req.file)),
   list: async (req, res) =>
     Response.success(res, await Service.list(req.user.userId)),
   create: async (req, res) =>

@@ -5,6 +5,7 @@ const validate = require('../middlewares/validate.middleware');
 const { protect, requireServices } = require('../middlewares/auth.middleware');
 router.use(protect, requireServices('RIDER'));
 router.get('/', controller.list);
+router.post('/:id/photo', schema.id, validate, require('../middlewares/provider_upload.middleware'), controller.uploadPhoto);
 router.post('/', schema.normalize, schema.create, validate, controller.create);
 router.put('/:id', schema.normalize, schema.id, schema.update, validate, controller.update);
 router.delete('/:id', schema.id, validate, controller.remove);

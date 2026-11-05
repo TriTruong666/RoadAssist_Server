@@ -1,7 +1,7 @@
 const { body, param } = require("express-validator");
 const { VEHICLE_TYPES, RIDE_MODES } = require("../common/auth.constants");
 const dimensions = (field, min, max) =>
-  body(field).optional().isFloat({ min, max }).bail().customSanitizer(Number);
+  body(field).optional().custom(value => value === null || (["number", "string"].includes(typeof value) && value !== "" && Number.isFinite(Number(value)) && Number(value) >= min && Number(value) <= max)).bail().customSanitizer(value => value === null ? null : Number(value));
 function fields(update = false) {
   const required = (rule) => (update ? rule.optional() : rule);
   return [

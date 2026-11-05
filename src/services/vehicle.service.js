@@ -27,12 +27,34 @@ class VehicleService {
     if (!vehicle) throw new NotFoundException(errors.VEHICLE_NOT_FOUND);
     return vehicle;
   }
-  static list(userId) {
-    return VehicleProfile.findAll({
+  static async list(userId) {
+    const rows = await VehicleProfile.findAll({
       where: { userId },
       include: this.include,
       order: [["createdAt", "DESC"]],
     });
+    const { Op } = require("sequelize");
+    const photos = rows.length ? await sequelize.models.S3Asset.findAll({ where: { userId, attachedTo: { [Op.in]: rows.map(row => `vehicle:${row.id}`) } }, order: [["createdAt", "DESC"], ["id", "DESC"]] }) : [];
+    return rows.map(row => ({ ...row.toJSON(), photo: (() => { const photo = photos.find(asset => asset.attachedTo === `vehicle:${row.id}`); return photo ? { id: photo.id, url: photo.s3Url } : null; })() }));
+  }
+  static async uploadPhoto(userId, id, file) {
+    const { BadRequestException } = require("../common/exceptions/BaseException");
+    if (!file) throw new BadRequestException("Cần chọn ảnh phương tiện");
+    // Authorize before image decoding or external storage work.
+    await this.owned(userId, id);
+    const [image] = await require("../middlewares/upload.middleware").compress([file]);
+    const Storage = require("./s3.service");
+    return Storage.withUploads(keys => sequelize.transaction(async transaction => {
+      await this.lockUser(userId, transaction);
+      const vehicle = await this.owned(userId, id, transaction);
+      await Policy.assertNotBusy(vehicle, await Policy.linkedProviders(vehicle, transaction), transaction);
+      const Asset = sequelize.models.S3Asset;
+      const old = await Asset.findAll({ where: { userId, attachedTo: `vehicle:${id}` }, transaction, lock: transaction.LOCK.UPDATE });
+      const saved = await Storage.upload({ body: image.content, mimeType: image.mimeType, originalName: "vehicle.webp", userId, attachedTo: `vehicle:${id}`, transaction, keys });
+      for (const asset of old) await asset.destroy({ transaction });
+      transaction.afterCommit(() => Storage.cleanup(old.map(asset => asset.s3Key)));
+      return { id: saved.record.id, url: saved.url };
+    }));
   }
   static async create(userId, data) {
     return sequelize.transaction(async (transaction) => {
@@ -152,6 +174,9 @@ class VehicleService {
       await ProviderAccess.synchronize(user, transaction);
       if (user.activeVehicleId === id)
         await user.update({ activeVehicleId: null }, { transaction });
+      const photos = await sequelize.models.S3Asset.findAll({ where: { userId, attachedTo: `vehicle:${id}` }, transaction });
+      for (const photo of photos) await photo.destroy({ transaction });
+      transaction.afterCommit(() => require("./s3.service").cleanup(photos.map(photo => photo.s3Key)));
       await vehicle.destroy({ transaction });
       return { deleted: true, revokedProviders };
     });
