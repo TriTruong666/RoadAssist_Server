@@ -9,12 +9,24 @@ const { BadRequestException, ForbiddenException, NotFoundException, ConflictExce
 const errors = require('../common/exceptions/error_codes');
 const META = ['id', 'providerId', 'documentType', 'mimeType', 'originalName', 'size', 'sha256', 'subjectFingerprint', 'withdrawnAt', 'createdAt', 'url', 's3Key'];
 function detectMime(buffer) {
+  if (/^%PDF-(?:1\.[0-7]|2\.0)[\r\n]/.test(buffer.toString('ascii', 0, 9)) && /%%EOF[\s\0]*$/.test(buffer.subarray(-1024).toString('ascii'))) return 'application/pdf';
   if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return 'image/png';
   if (buffer[0] === 255 && buffer[1] === 216 && buffer[2] === 255) return 'image/jpeg';
   if (buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
   return null;
 }
 class ProviderDocumentService {
+  static async vehiclePhotoFile(actor, id, assetId) {
+    const profile = await this.authorize(actor, id);
+    if (profile.userId !== actor.userId || !profile.vehicleProfileId) throw new ForbiddenException();
+    const asset = await sequelize.models.S3Asset.findOne({ where: { id: assetId, userId: actor.userId, attachedTo: `vehicle:${profile.vehicleProfileId}` } });
+    if (!asset) throw new NotFoundException("Không tìm thấy ảnh của phương tiện đã chọn");
+    const object = await require('./s3.service').getDownloadStream(asset.s3Key);
+    const chunks = []; let size = 0;
+    for await (const chunk of object.Body) { size += chunk.length; if (size > 5 * 1024 * 1024) { object.Body.destroy?.(); throw new BadRequestException("Ảnh tối đa 5MB"); } chunks.push(chunk); }
+    return { buffer: Buffer.concat(chunks), mimetype: asset.mimeType, originalname: 'vehicle.webp', size };
+  }
+
   static async authorize(actor, id) {
     const profile = await sequelize.models.Provider.findByPk(id);
     if (!profile || (profile.userId !== actor.userId && actor.role !== 'admin')) throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
@@ -49,9 +61,10 @@ class ProviderDocumentService {
     return document;
   }
   static async upload(actor, id, documentType, file, context) {
-    if (!file || !DOCUMENT_TYPES.includes(documentType)) throw new BadRequestException('Cần ảnh và loại giấy tờ hợp lệ');
+    if (!file || !DOCUMENT_TYPES.includes(documentType)) throw new BadRequestException('Cần tệp và loại giấy tờ hợp lệ');
     const mimeType = detectMime(file.buffer);
-    if (!mimeType || mimeType !== file.mimetype || file.size > 5 * 1024 * 1024) throw new BadRequestException('Chỉ nhận ảnh JPEG, PNG hoặc WebP tối đa 5MB');
+    if (!mimeType || mimeType !== file.mimetype || file.size > 5 * 1024 * 1024) throw new BadRequestException('Chỉ nhận PDF hoặc ảnh JPEG, PNG, WebP tối đa 5MB');
+    if (documentType === 'VEHICLE_PHOTO' && mimeType === 'application/pdf') throw new BadRequestException('Ảnh phương tiện phải là JPEG, PNG hoặc WebP');
     return require('./s3.service').withUploads(keys => ProviderService.mutate(actor, id, async ({ profile, vehicle, transaction }) => {
       if (profile.userId !== actor.userId) throw new ForbiddenException();
       if (profile.status === 'REVOKED') throw new ConflictException(errors.PROVIDER_INVALID_TRANSITION);

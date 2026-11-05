@@ -16,7 +16,7 @@ module.exports = {
         req.user,
         req.validated.id,
         req.validated.documentType,
-        req.file,
+        req.file || (req.validated.assetId ? await Service.vehiclePhotoFile(req.user, req.validated.id, req.validated.assetId) : null),
         requestContext(req),
       ),
       true,

@@ -79,6 +79,7 @@ class ProviderService {
       return await sequelize.transaction(async transaction => {
         transaction.roadAssistActorId = actor.userId;
         const user = await VehicleService.lockUser(actor.userId, transaction), oldVersion = user.sessionVersion;
+        if (user.role === 'admin') throw new ForbiddenException('Admin không đăng ký hồ sơ đối tác');
         await this.ensureUnique(user.userId, data.kind, transaction);
         const histories = await this.checkHistory(user.userId, data.kind, transaction);
         const vehicle = await this.vehicleFor(user.userId, data, transaction);

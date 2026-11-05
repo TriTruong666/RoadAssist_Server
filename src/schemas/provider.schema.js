@@ -189,7 +189,7 @@ module.exports.update.push(...capabilityFields());
 module.exports.approve = [
   body("reason").isString().bail().trim().isLength({ min: 1, max: 500 }),
 ];
-module.exports.documentType = [body("documentType").isIn(DOCUMENT_TYPES)];
+module.exports.documentType = [body("documentType").isIn(DOCUMENT_TYPES), body("assetId").optional().isUUID(4).bail().custom((value, { req }) => req.body.documentType === "VEHICLE_PHOTO")];
 module.exports.documentId = [param("documentId").isUUID(4)];
 module.exports.search.push(
   body("availableOnly").optional().isBoolean({ strict: true }),
