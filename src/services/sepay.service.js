@@ -26,8 +26,15 @@ const normalize = (value) =>
 class Sepay {
   static assertConfig() {
     const app = require("../config/app.config").app;
-    if (!["live", "mock"].includes(config.mode) || (app.isProduction && config.mode === "mock"))
-      throw new Error("PAYMENT_GATEWAY_MODE must be live in production, live or mock otherwise");
+    if (
+      !["live", "mock", "sandbox"].includes(config.mode) ||
+      (app.isProduction && config.mode !== "live")
+    )
+      throw new Error(
+        "PAYMENT_GATEWAY_MODE must be live in production, live, mock or sandbox otherwise",
+      );
+    if (config.mode === "sandbox")
+      require("./sepay_gateway.service").assertConfigured();
     Bills.bps();
     if (!["apikey", "hmac"].includes(config.webhookAuth))
       throw new Error("SEPAY_WEBHOOK_AUTH must be apikey or hmac");
@@ -45,7 +52,12 @@ class Sepay {
       throw new Error("PAYMENT_TTL_MINUTES must be 1..1440");
   }
   static authenticate(req) {
-    if (config.mode === "mock") Policy.fail("SEPAY_MOCK_MODE", "Webhook thật đang tắt khi dùng SePay mock", 503);
+    if (config.mode !== "live")
+      Policy.fail(
+        "SEPAY_MOCK_MODE",
+        "Webhook thật đang tắt khi dùng SePay mock",
+        503,
+      );
     if (config.webhookAuth === "hmac") {
       if (!config.webhookSecret)
         Policy.fail("SEPAY_NOT_CONFIGURED", "Chưa cấu hình webhook SePay", 503);
@@ -94,6 +106,7 @@ class Sepay {
       amount: payload.transferAmount,
       codes: this.codes(payload),
       reference: payload.referenceCode || "",
+      ...(payload.gatewayVerified === true ? { gatewayVerified: true } : {}),
     };
     const hash = createHash("sha256")
       .update(JSON.stringify(semantic))
@@ -198,6 +211,18 @@ class Sepay {
       if (first && first.id !== receipt.id) return;
       const data = receipt.payload;
       const bank = order.bankSnapshot;
+      if (bank.adapter === "checkout" && data.gatewayVerified !== true) {
+        await receipt.update(
+          {
+            status: "REVIEW",
+            reason: "GATEWAY_VERIFICATION_REQUIRED",
+            intentId: order.id,
+            processedAt: new Date(),
+          },
+          { transaction },
+        );
+        return;
+      }
       if (
         String(data.accountNumber) !== String(bank.accountNumber) ||
         normalize(data.gateway) !== normalize(bank.gatewayName) ||
