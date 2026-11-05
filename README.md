@@ -34,7 +34,7 @@ Startup synchronizes registered RoadAssist models with `alter: true` and runs Ro
 
 `DB_FORCE_RESET=true` explicitly recreates registered model tables and clears the selected Redis database. Keep it false for normal startup. Legacy partial reset (`DB_RESET=true`) is rejected; enabling both reset flags is rejected as well. Shutdown closes HTTP, Redis and PostgreSQL connections.
 
-SMTP, JWT, SePay, maps and Socket.io settings are listed in `.env.example`. SMTP verifies registration email and password resets; password login has no IP-based OTP. MapTiler searches places, Valhalla computes routes avoiding confirmed hazards, and Socket.IO handles scene chat. SePay webhook ingestion, allocation and application escrow are implemented in Phase 6. SMTP transport creation does not send mail. Node.js provides `crypto` as a built-in module.
+SMTP, JWT, SePay, maps and Socket.io settings are listed in `.env.example`. SMTP verifies registration email and password resets; password login has no IP-based OTP. VietMap v4 searches and resolves places, Valhalla computes routes avoiding confirmed hazards, and Socket.IO handles scene chat. SePay webhook ingestion, allocation and application escrow are implemented in Phase 6. SMTP transport creation does not send mail. Node.js provides `crypto` as a built-in module.
 
 ## Container and deployment
 
@@ -108,9 +108,7 @@ Email is trimmed/lowercased, phone punctuation removed, and vehicle plates upper
 
 ## Initial administrator
 
-Optionally set `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_PHONE`, and `ADMIN_SEED_NAME` before startup. Seeding creates an administrator once, never replaces an existing password, and refuses to promote a conflicting existing account. Leave all seed credential variables empty to disable it. The public registration API never assigns administrator privileges.
-
-Seed JSON accounts use requestedServices as service interests; legacy services values are treated as requests. Non-admin seeds start as guest and do not grant provider permissions. Set `emailVerified: true` explicitly only for trusted fixture accounts; public registration always requires email OTP. The existing JSON seed workflow is retained.
+Startup seeds exactly one administrator. Set `ADMIN_SEED_EMAIL`, `ADMIN_SEED_PASSWORD`, `ADMIN_SEED_PHONE`, and optionally `ADMIN_SEED_NAME` to override the single admin in `src/seeds/seed_data/user_seed.json`. Environment credentials replace the JSON selection; they do not add another account. The admin is verified and onboarded. Seeding never replaces an existing password or promotes a conflicting account. Public registration never assigns administrator privileges.
 
 ## Provider registration and administration (Phase 3)
 
@@ -200,7 +198,7 @@ and `/users/me`. Provider choices never bypass approval or operational checks.
 
 Run one development server process per port. Keep `DB_FORCE_RESET=false` and
 `DB_RESET=false` for routine startup; a full reset is an explicit one-off operation.
-Set `MAPTILER_API_KEY` for place search and run/configure `VALHALLA_ROUTER_URL`
+Set `VIETMAP_API_TOKEN` for place search and run/configure `VALHALLA_ROUTER_URL`
 for road routing. Neither external provider is replaced with fake map results.
 
 Verification progress and remaining end-to-end requirements are tracked in
@@ -213,11 +211,15 @@ normal development database.
 
 ### Local map services
 
-Set `MAPTILER_API_KEY` in the ignored `.env.development`. If the key is restricted
-by HTTP origin, set `MAPTILER_REQUEST_ORIGIN` to a fixed application origin allowed
-by that key (for example `http://127.0.0.1:5173`). The backend supplies that header;
-it never forwards an arbitrary request Origin to MapTiler. Search is scoped to
-Vietnam/VI and accepts an optional validated latitude/longitude proximity pair.
+Set `VIETMAP_API_TOKEN` in the ignored `.env.development`. The default
+`VIETMAP_BASE_URL` is `https://maps.vietmap.vn`. The WMS-compatible adapter uses
+Autocomplete v4 with `display_type=6` and `focus=latitude,longitude`; selecting a
+suggestion calls Place v4 using its `ref_id` to get validated coordinates. API
+keys and raw upstream errors never reach the client. `GET /places/search`,
+`GET /places/detail?refId=...` and `GET /places/reverse` require authentication.
+Missing credentials or upstream failure produce a structured 503, never invented
+coordinates. The client uses CARTO Voyager raster tiles and the WMS map styling;
+`VITE_CARTO_API_KEY` is an optional public basemap key.
 
 ```sh
 npm run infra:routing
@@ -240,20 +242,17 @@ and converts distance meters to kilometers. Native Valhalla JSON uses an encoded
 shape and is not treated as GeoJSON. Upstream outages remain structured 503 errors.
 
 ```sh
-# Client repo: actual MapTiler + self-hosted Vietnam routing, actual domain DB,
+# Client repo: actual CARTO/VietMap + self-hosted Vietnam routing, actual domain DB,
 # fixture SMTP/S3 transports and the explicitly mocked SePay gateway.
 RUN_MAP_SERVICE_TESTS=1 PLAYWRIGHT_CHANNEL=chrome npm run test:integration
 ```
 
 
-The active Leaflet basemap also uses MapTiler through authenticated
-`GET /places/tiles/:theme/:z/:x/:y.png`. Tile coordinates/styles are validated;
-the server coalesces requests and keeps at most 256 tiles / 16 MiB, respecting
-upstream no-store/no-cache and capping cache lifetime at one hour. PNG headers
-are checked, errors do not disclose upstream credentials, and HTTP caching is
-private. API keys remain on the server for both geocoding and tiles.
-The previous unauthenticated CARTO URLs returned an API-key placeholder image
-with HTTP 200, so HTTP success alone is not evidence of a rendered basemap.
+The active basemap is CARTO Voyager. MapTiler's authenticated tile proxy remains
+available for older consumers, but the active map and address search no longer
+use it. The WMS-style UI has a saved-place sidebar, submit-to-search address box,
+VietMap detail popup, save/edit/delete actions, zoom, Vietnam view and GPS controls.
+Opening rescue panels preserves the existing Leaflet map instance.
 
 
 ## Durable administration alerts
@@ -270,3 +269,18 @@ rematch deadlines, and creates a fixed 1,000-provider PostgreSQL dataset for map
 clustering/filtering/truncation tests. None of its handlers are imported by normal
 startup. The client presents monitor truncation explicitly and links to complete
 paginated administration lists.
+
+## Clean development reset
+
+Stop the development server, run `npm run db:reset`, then start it again. This
+one-shot command recreates model tables, runs migrations, clears the configured
+Redis database and seeds exactly one admin. Keep `DB_FORCE_RESET=false` and
+`DB_RESET=false` for ordinary startup. Demo fixtures are no longer loaded at
+startup; historical demo scripts/tests remain available for explicit test runs.
+New customers and partners register normally and complete setup once. Admins
+cannot enter onboarding or register their own provider profile; completed users
+manage subsequent changes in account/provider screens.
+
+Map clicks select coordinates only. The active UI never reverse-geocodes them;
+VietMap is called only for a submitted address search and a selected search result.
+Typing, panning, zooming, GPS and selecting saved places do not call VietMap.

@@ -17,7 +17,7 @@ app.set("trust proxy", config.app.trustProxy);
 app.use(require("morgan")("dev"));
 app.use(require("cors")({ origin: config.cors, credentials: true }));
 app.use(
-  "/api/v1/payments/sepay/webhook",
+  ["/api/v1/payments/sepay/webhook", "/api/v1/payments/sepay/ipn"],
   express.json({
     limit: "64kb",
     verify(req, res, buffer) {
