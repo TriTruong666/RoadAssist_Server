@@ -12,6 +12,15 @@ async function seedSystemAdmin() {
   const password = process.env.ADMIN_SEED_PASSWORD;
   const phone = process.env.ADMIN_SEED_PHONE;
   if (!email && !password && !phone) return;
+  return seedAdmin({
+    email,
+    password,
+    phone,
+    name: process.env.ADMIN_SEED_NAME,
+  });
+}
+
+async function seedAdmin({ email, password, phone, name }) {
   if (
     !email ||
     !password ||
@@ -35,14 +44,15 @@ async function seedSystemAdmin() {
     ) {
       throw new Error("Admin seed identity conflicts with an existing account");
     }
-    if (!existing.emailVerifiedAt && await existing.comparePassword(password)) await existing.update({ emailVerifiedAt: new Date() });
+    if (!existing.emailVerifiedAt && (await existing.comparePassword(password)))
+      await existing.update({ emailVerifiedAt: new Date() });
     return existing;
   }
   return User.create({
     email,
     password,
     phone,
-    name: process.env.ADMIN_SEED_NAME || "RoadAssist Admin",
+    name: name || "RoadAssist Admin",
     role: "admin",
     services: ["RIDER"],
     emailVerifiedAt: new Date(),
@@ -50,72 +60,30 @@ async function seedSystemAdmin() {
   });
 }
 
-/**
- * Seed initial user accounts for 3 primary roles (admin, guest, provider)
- * from src/seeds/seed_data/user_seed.json.
- */
+/** Seed exactly one administrator: environment credentials override the JSON account. */
 async function seedUsers() {
-  const results = [];
-  const seedFilePath = path.join(__dirname, "seed_data", "user_seed.json");
-
-  if (fs.existsSync(seedFilePath)) {
-    try {
-      const rawData = fs.readFileSync(seedFilePath, "utf8");
-      const usersData = JSON.parse(rawData);
-
-      if (Array.isArray(usersData)) {
-        for (const item of usersData) {
-          const email = item.email?.trim().toLowerCase();
-          const phone = item.phone?.trim();
-
-          if (!email || !phone) continue;
-
-          const existing = await User.findOne({
-            where: { [Op.or]: [{ email }, { phone }] },
-          });
-
-          if (existing) {
-            console.log(
-              `[SEED]: Người dùng ${email} (${existing.role}) đã tồn tại trong DB, bỏ qua.`,
-            );
-            results.push(existing);
-          } else {
-            const created = await User.create({
-              name: item.name || "RoadAssist User",
-              email,
-              password: item.password,
-              phone,
-              role: item.role === "admin" ? "admin" : "guest",
-              // Seed selections are not operational provider grants.
-              services: ["RIDER"],
-              requestedServices: item.requestedServices || item.services || ["RIDER"],
-              emailVerifiedAt: item.emailVerified === true ? new Date() : null,
-              status: item.status || "ACTIVE",
-              onboarded: item.onboarded !== undefined ? item.onboarded : true,
-            });
-            console.log(
-              `[SEED]: Đã tạo tài khoản mẫu thành công: ${created.email} [Role: ${created.role}]`,
-            );
-            results.push(created);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("[SEED ERROR]: Không thể nạp dữ liệu từ user_seed.json:", error.message);
-    }
-  }
-
-  // Also check if custom environment variable admin is specified
   const envAdmin = await seedSystemAdmin();
-  if (envAdmin) {
-    results.push(envAdmin);
-  }
-
-  return results;
+  if (envAdmin) return [envAdmin];
+  const records = JSON.parse(
+    fs.readFileSync(
+      path.join(__dirname, "seed_data", "user_seed.json"),
+      "utf8",
+    ),
+  );
+  if (
+    !Array.isArray(records) ||
+    records.length !== 1 ||
+    records[0].role !== "admin"
+  )
+    throw new Error("user_seed.json must contain exactly one admin account");
+  const record = records[0];
+  return [
+    await seedAdmin({
+      ...record,
+      email: record.email?.trim().toLowerCase(),
+      phone: record.phone?.trim(),
+    }),
+  ];
 }
 
-module.exports = {
-  seedUsers,
-  seedSystemAdmin,
-};
-
+module.exports = { seedUsers, seedSystemAdmin };
