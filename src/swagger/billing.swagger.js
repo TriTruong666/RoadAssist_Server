@@ -10,6 +10,7 @@ const schemas = {
     properties: {
       id: uuid,
       journeyId: uuid,
+      ticketId: { ...uuid, nullable: true, description: "One bill per ticket; null only on legacy multi-ticket bills." },
       code: { type: "string" },
       status: {
         type: "string",

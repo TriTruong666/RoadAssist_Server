@@ -13,9 +13,9 @@ const Bill = db.define(
   {
     id: id(),
     code: { type: D.STRING(24), unique: true, allowNull: false },
+    ticketId: { type: D.UUID, unique: true, field: "ticket_id" },
     journeyId: {
       type: D.UUID,
-      unique: true,
       allowNull: false,
       field: "journey_id",
     },

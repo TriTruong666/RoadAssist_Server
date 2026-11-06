@@ -20,8 +20,9 @@ const Notices = require("./finance_notification.service");
 const fail = (...args) => Policy.fail(...args);
 const paid = (p) => ["HELD", "CONFIRMED", "REFUNDED"].includes(p.status);
 class Bills {
-  static bps() {
-    const rate = require("../config/app.config").sepay.commissionRate;
+  static bps(type) {
+    const settings = require("../config/app.config").sepay;
+    const rate = type === "TOW" ? settings.towCommissionRate : settings.commissionRate;
     const bps = Math.round(rate * 10000);
     if (
       !Number.isFinite(rate) ||
@@ -120,9 +121,24 @@ class Bills {
       transaction,
     );
   }
-  static async syncJourney(journeyId, transaction, { ticketOverride } = {}) {
+  static async syncJourney(journeyId, transaction, options = {}) {
+    const legacy = await Bill.findOne({ where: { journeyId, ticketId: null }, transaction });
+    if (legacy) return this.syncTicket(journeyId, transaction, options);
+    const tickets = await Ticket.findAll({ where: { journeyId }, order: [["id", "ASC"]], transaction });
+    let first;
+    for (const ticket of tickets) {
+      const bill = await this.syncTicket(journeyId, transaction, { ...options, ticketId: ticket.id });
+      first ||= bill;
+    }
+    return first;
+  }
+  static async forTicket(ticket, transaction) {
+    return (await Bill.findOne({ where: { ticketId: ticket.id }, transaction })) ||
+      Bill.findOne({ where: { journeyId: ticket.journeyId, ticketId: null }, transaction });
+  }
+  static async syncTicket(journeyId, transaction, { ticketOverride, ticketId } = {}) {
     const tickets = await Ticket.findAll({
-      where: { journeyId },
+      where: { journeyId, ...(ticketId && { id: ticketId }) },
       transaction,
       order: [
         ["createdAt", "ASC"],
@@ -131,8 +147,8 @@ class Bills {
     });
     if (!tickets.length) return null;
     const [bill] = await Bill.findOrCreate({
-      where: { journeyId },
-      defaults: {
+      where: ticketId ? { ticketId } : { journeyId, ticketId: null },
+      defaults: { journeyId, ticketId: ticketId || null,
         code: `RAB-${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`,
         userId: tickets[0].userId,
       },
@@ -422,13 +438,14 @@ class Bills {
     if (!snapshot || snapshot.userId !== actor.userId)
       fail("BILL_NOT_FOUND", "Không tìm thấy hóa đơn", 404);
     return Locks.journey(snapshot.journeyId, actor, async (transaction) => {
-      const bill = await this.syncJourney(snapshot.journeyId, transaction);
-      return this.dto(bill, transaction);
+      await this.syncJourney(snapshot.journeyId, transaction);
+      return this.dto(await Bill.findByPk(id, { transaction }), transaction);
     });
   }
   static async dto(bill, transaction) {
     return {
       ...bill.toJSON(),
+      ticket: bill.ticketId ? await Ticket.findByPk(bill.ticketId, { attributes: ['id','type','status','quoteItems','quoteVersion','quoteHistory','towFare'], transaction }) : null,
       items: await Item.findAll({
         where: { billId: bill.id },
         order: [
@@ -446,6 +463,7 @@ class Bills {
       disputeAwards: await require("../models").Dispute.findAll({
         where: {
           journeyId: bill.journeyId,
+          ...(bill.ticketId && { ticketId: bill.ticketId }),
           status: { [Op.in]: ["RESOLVED", "REJECTED"] },
         },
         attributes: [
