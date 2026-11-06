@@ -244,12 +244,21 @@ class Dispatch {
     };
   }
   static async createRecord(actor, type, data, transaction, source) {
-    const { vehicle, snapshot } = await Policy.vehicle(
-      actor.userId,
-      source?.vehicleProfileId || data.vehicleProfileId,
-      transaction,
-    );
-    await Policy.busy(vehicle.id, transaction);
+    const incident = data.incidentVehicle;
+    const inline = !source?.vehicleProfileId && !data.vehicleProfileId && (source?.vehicleSnapshot || incident);
+    const { vehicle, snapshot } = inline
+      ? { vehicle: null, snapshot: source?.vehicleSnapshot || {
+          id: null, type: incident.type,
+          plateNumber: incident.plateNumber || "CHƯA CUNG CẤP",
+          brand: incident.brand || "Chưa cung cấp",
+          modelName: incident.modelName || "Chưa cung cấp",
+          width: incident.width || (incident.type === "CAR" ? 1.9 : 0.7),
+          height: incident.height || (incident.type === "CAR" ? 1.5 : 1.1),
+          length: incident.length || null, weightKg: incident.weightKg || null,
+          rideMode: "SOLO",
+        } }
+      : await Policy.vehicle(actor.userId, source?.vehicleProfileId || data.vehicleProfileId, transaction);
+    if (vehicle) await Policy.busy(vehicle.id, transaction);
     if (
       type === "WALK_IN" &&
       !source &&
@@ -325,7 +334,7 @@ class Dispatch {
         code: `RA-${type === "WALK_IN" ? "WI" : type}-${randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
         journeyId: source?.journeyId || randomUUID(),
         userId: actor.userId,
-        vehicleProfileId: vehicle.id,
+        vehicleProfileId: vehicle?.id || null,
         vehicleSnapshot: snapshot,
         pricingSnapshot,
         requirements,
@@ -368,20 +377,8 @@ class Dispatch {
       { transaction },
     );
     if (type === "TOW") {
-      ticket.travelFee = Money.add(
-        pricingSnapshot.towBaseFee,
-        Money.amount(
-          Math.ceil(
-            distanceMeters(
-              { latitude: pickupLatitude, longitude: pickupLongitude },
-              {
-                latitude: ticket.dropoffLatitude,
-                longitude: ticket.dropoffLongitude,
-              },
-            ) / 1000,
-          ) * Money.cents(pricingSnapshot.towPerKm),
-        ),
-      );
+      const preview = require('./pricing.service').tow(ticket, {});
+      ticket.travelFee = Money.amount(preview.estimate * 100);
       ticket.totalAmount = Policy.total(ticket);
       await ticket.save({ transaction });
     }
@@ -439,6 +436,8 @@ class Dispatch {
         throw new NotFoundException(errors.PROVIDER_NOT_FOUND);
       if (t.providerId === p.id && t.status === S.MATCHED) return this.dto(t);
       Policy.state(t, PENDING);
+      if (t.offeredProviderId && !t.offerPublicAt && t.offerExpiresAt > new Date() && t.offeredProviderId !== p.id)
+        Policy.fail('DISPATCH_RESERVED', 'Cuốc đang được giữ riêng cho đối tác khác');
       if (
         t.handoffKind !== "TOW_DELIVERY" &&
         t.queueExpiresAt &&
@@ -471,9 +470,10 @@ class Dispatch {
         latitude: t.pickupLatitude,
         longitude: t.pickupLongitude,
       });
-      if (distance > 15000)
-        Policy.fail("DISPATCH_OUT_OF_RANGE", "Cuốc nằm ngoài bán kính 15km");
+      if (distance > (profile.receiveRadiusKm || 10) * 1000)
+        Policy.fail("DISPATCH_OUT_OF_RANGE", "Cuốc nằm ngoài bán kính nhận cuốc");
       let fields = {
+        offeredProviderId: null, offerExpiresAt: null, offerPublicAt: new Date(),
         providerId: p.id,
         status: S.MATCHED,
         acceptedAt: new Date(),
@@ -498,11 +498,16 @@ class Dispatch {
         noShowDetectedAt: null,
         safetyEscalatedAt: null,
       };
+      if (t.type === "TOW") {
+        const fare = require("./pricing.service").tow(t, profile);
+        fields.towFare = fare;
+        fields.travelFee = Money.amount(fare.estimate * 100);
+      }
       if (t.type === "SOS") {
         fields.callOutFee =
-          distance <= 1000 ? "0.00" : t.pricingSnapshot.sosCallOutFee;
+          distance <= 1000 ? "0.00" : String(profile.callOutFee ?? t.pricingSnapshot.sosCallOutFee);
         fields.travelFee = Money.amount(
-          Math.ceil(distance / 1000) * Money.cents(t.pricingSnapshot.sosPerKm),
+          Math.round(distance / 1000 * Number(profile.travelPerKmFee ?? t.pricingSnapshot.sosPerKm) / 1000) * 100000,
         );
       }
       Object.assign(fields, {
@@ -575,18 +580,18 @@ class Dispatch {
               "DISPATCH_INVALID_STATE_TRANSITION",
               "Cước kéo xe được tính phía server",
             );
-          if (t.quoteAmount !== null) {
-            if (Money.cents(t.quoteAmount) === Money.cents(data.amount))
-              return this.dto(t);
-            throw new ConflictException(
-              errors.DISPATCH_QUOTE_ALREADY_SUBMITTED,
-            );
-          }
+          if (t.quoteAmount !== null && t.status !== S.QUOTED)
+            throw new ConflictException(errors.DISPATCH_QUOTE_ALREADY_SUBMITTED);
           Policy.state(
             t,
-            t.type === "WALK_IN" ? [S.MATCHED, S.IN_SHOP] : [S.ARRIVED],
+            t.type === "WALK_IN" ? [S.MATCHED, S.IN_SHOP, S.QUOTED] : [S.ARRIVED, S.QUOTED],
           );
+          const items = require("./pricing.service").quote(data.items, data.amount);
+          if (t.status === S.QUOTED && Money.cents(t.quoteAmount) === Money.cents(data.amount) && JSON.stringify(t.quoteItems || []) === JSON.stringify(items)) return this.dto(t);
+          if (t.quoteAmount !== null) await require('./pricing.service').prepareAmendment(t, transaction);
           fields = {
+            quoteItems: items, quoteVersion: (t.quoteVersion || 0) + 1,
+            quoteHistory: t.quoteAmount === null ? t.quoteHistory || [] : [...(t.quoteHistory || []), { amount: t.quoteAmount, items: t.quoteItems, version: t.quoteVersion, at: new Date().toISOString() }],
             quoteAmount: Money.amount(Money.cents(data.amount)),
             status: t.estimateStatus === "APPROVED" ? S.FINAL_QUOTED : S.QUOTED,
           };
@@ -595,6 +600,10 @@ class Dispatch {
         case "approve-quote":
           if (t.status === S.IN_PROGRESS) return this.dto(t);
           Policy.state(t, [S.QUOTED, S.FINAL_QUOTED]);
+          if (data.method === 'CASH') {
+            const bill = await require('./bill.service').forTicket(t, transaction);
+            await require('./payment.service').create(actor, 'CASH', { billId: bill.id, ticketId: t.id }, { transaction, tickets: [t] });
+          }
           await Payment.fundedForApproval(t, transaction);
           fields = { status: S.IN_PROGRESS };
           break;
@@ -645,7 +654,11 @@ class Dispatch {
               longitude: t.dropoffLongitude,
             });
           }
-          fields = { status: S.RESOLVED, resolvedAt: new Date() };
+          await require("./pricing.service").requireCashReceived(t, transaction);
+          if (t.type === "TOW" && t.towFare) {
+            fields = { towFare: { ...t.towFare, final: Math.min(t.towFare.estimate, t.towFare.ceiling) } };
+          }
+          fields = { ...fields, status: S.RESOLVED, resolvedAt: new Date() };
           break;
         case "unfixable":
           if (t.type === "TOW")
@@ -936,7 +949,7 @@ class Dispatch {
         t.requirements,
         transaction,
       );
-      const travelFee = Money.add(
+      let travelFee = Money.add(
         t.pricingSnapshot.towBaseFee,
         Money.amount(
           Math.ceil(
@@ -950,8 +963,14 @@ class Dispatch {
           ) * Money.cents(t.pricingSnapshot.towPerKm),
         ),
       );
+      let towFare = t.towFare;
+      if (towFare && t.providerId) {
+        const recalculated = require('./pricing.service').tow({ ...t.get(), ...destination }, { towBaseFee: towFare.baseFee, towPerKmFee: towFare.perKmFee });
+        towFare = { ...towFare, loadedKm: recalculated.loadedKm, estimate: Math.min(towFare.ceiling, Math.round((towFare.baseFee + towFare.perKmFee * Math.max(0, recalculated.loadedKm - towFare.includedKm)) * towFare.nightMultiplier / 1000) * 1000) };
+        travelFee = Money.amount(towFare.estimate * 100);
+      }
       const fields = {
-        ...destination,
+        ...destination, towFare,
         travelFee,
         totalAmount: Money.add(travelFee, t.waitingFee),
         estimateAmount: null,
@@ -1172,7 +1191,8 @@ class Dispatch {
           { handoffKind: "TOW_DELIVERY" },
         ],
       },
-      literal(`(${distance}) <= 15000`),
+      literal(`(${distance}) <= ${(p.receiveRadiusKm || 10) * 1000}`),
+      { [Op.or]: [{ offeredProviderId: null }, { offeredProviderId: p.id }, { offerPublicAt: { [Op.ne]: null } }, { offerExpiresAt: { [Op.lte]: new Date() } }] },
       literal(`NOT (${escapedId}::uuid = ANY("former_assigned_shop_ids"))`),
       literal(
         `NOT (${db.escape(actor.userId)}::uuid = ANY("former_assigned_user_ids"))`,
