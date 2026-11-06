@@ -1,10 +1,12 @@
-# Phase 6: Journey billing, SePay, cash and payouts
+# Billing, SePay, cash and payouts
+
+Hợp đồng giá và bill hiện hành: [PAYMENTS_AND_PRICING.md](PAYMENTS_AND_PRICING.md). Các mô tả journey tổng hợp dưới đây chỉ còn áp dụng cho bill lịch sử nhiều ticket.
 
 Phase 6 connects the real billing models to Phase 5. Invoice reconciliation happens inside dispatch create/change transactions; the approval/start gate uses current **applied** allocations, not customer flags or the original transfer amount. Account APIs use `road_as_token`; the machine webhook uses its independently configured SePay authentication.
 
 ## Invoice and monetary invariants
 
-One Bill exists per journey (database unique constraint). BillItem is unique per ticket and charge type: SOS_CALLOUT, SOS_TRAVEL, TOW_FARE, WAITING_FEE, SHOP_REPAIR. New charge types include a separate SOS travel line so failure can void travel independently of callout. Historical line IDs are retained when values become zero.
+New tickets have one Bill per ticket (unique ticketId); journeyId groups navigation only. Legacy multi-ticket bills remain unchanged. BillItem is unique per ticket and charge type: SOS_CALLOUT, SOS_TRAVEL, TOW_FARE, WAITING_FEE, SHOP_REPAIR. New charge types include a separate SOS travel line so failure can void travel independently of callout. Historical line IDs are retained when values become zero.
 
 Items derive from immutable vehicle/tariff snapshots, current assigned provider, quoteVoided/chargesVoided and live server waiting time. The invoice is DRAFT for unpriced active work, PENDING/PARTIAL/PAID according to actual applied receipts, or VOID when every ticket ends with no payable amount. Cash promises reserve a payment allocation and can authorize work, but do **not** count as paid money.
 
