@@ -129,10 +129,7 @@ class Disputes {
         transaction,
         { note: data.note, images },
       );
-      const bill = await Bill.findOne({
-        where: { journeyId: t.journeyId },
-        transaction,
-      });
+      const bill = await Bills.forTicket(t, transaction);
       await Bills.event(
         bill.id,
         "DISPUTE_OPENED",
@@ -382,7 +379,8 @@ class Disputes {
             "DISPUTE_AWAITING_RESPONSE",
             "Cần phản hồi của bị đơn hoặc hết thời hạn phản hồi",
           );
-        const bill = await Bills.syncJourney(t.journeyId, transaction);
+        await Bills.syncJourney(t.journeyId, transaction);
+        const bill = await Bills.forTicket(t, transaction);
         const items = await Item.findAll({
           where: { ticketId: t.id },
           order: [["id", "ASC"]],

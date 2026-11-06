@@ -111,7 +111,6 @@ class Payments {
       !require("../config/app.config").app.isProduction &&
       actor.email?.endsWith("@demo.roadassist.test");
     const bank = method === "SEPAY" ? this.bank(demoSeed) : {};
-    const bps = Bills.bps();
     const fingerprint = createHash("sha256")
       .update(
         JSON.stringify({
@@ -123,7 +122,8 @@ class Payments {
       )
       .digest("hex");
     const execute = async (transaction, tickets) => {
-      const bill = await Bills.syncJourney(snapshot.journeyId, transaction);
+      await Bills.syncJourney(snapshot.journeyId, transaction);
+      const bill = await Bill.findByPk(snapshot.id, { transaction });
       if (data.clientRequestId) {
         const prior = await Intent.findOne({
           where: {
@@ -252,8 +252,8 @@ class Payments {
               appliedAmount: Money.amount(amount),
               method,
               transactionCode: `${code}-${index + 1}`,
-              commissionBps: bps,
-              commissionRate: String(bps / 10000),
+              commissionBps: Bills.bps(tickets.find(t => t.id === item.ticketId)?.type),
+              commissionRate: String(Bills.bps(tickets.find(t => t.id === item.ticketId)?.type) / 10000),
             },
             { transaction },
           ),
@@ -452,12 +452,16 @@ class Payments {
       const ticket = await Ticket.findByPk(item.ticketId, { transaction });
       if (
         ticket.providerId !== p.providerId ||
-        !["7", "4", "15", "12"].includes(ticket.status)
+        !["7", "4", "15", "12", ...(ticket.type === "TOW" ? ["6"] : [])].includes(ticket.status)
       )
         fail(
           "PAYMENT_HANDOVER_REQUIRED",
           "Chỉ xác nhận tiền mặt lúc bàn giao hoặc kết thúc xử lý",
         );
+      if (ticket.type === "TOW" && ticket.status === "6") {
+        await require('./handover.service').require(ticket, 'DELIVERY', transaction);
+        Policy.trustedLocation(provider, { latitude: ticket.dropoffLatitude, longitude: ticket.dropoffLongitude });
+      }
       if (!Money.cents(p.appliedAmount) || p.appliedAmount !== p.amount)
         fail("PAYMENT_CHARGES_CHANGED", "Số tiền cần xác nhận đã thay đổi");
       await p.update(
