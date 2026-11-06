@@ -1,7 +1,7 @@
 const cron = require("node-cron");
 const LocationService = require("../services/location.service");
 const expireFlags = require("./cron/flag_ttl.job");
-let locationTask, flagTask, storageTask, dispatchTask, financeTask;
+let locationTask, flagTask, storageTask, dispatchTask, financeTask, offerTask;
 async function initCronJobs() {
   await LocationService.reconcile();
   await require("../services/dispatch_liveness.service").run();
@@ -15,6 +15,9 @@ async function initCronJobs() {
     }
   };
   await financeWork();
+  if (!offerTask) offerTask = cron.schedule("*/10 * * * * *", async () => {
+    try { await require("../services/dispatch_offer.service").sweep(); } catch (error) { console.error("[Dispatch offers]", error.message); }
+  }, { noOverlap: true });
   if (!financeTask)
     financeTask = cron.schedule("*/10 * * * * *", financeWork, {
       noOverlap: true,
@@ -57,6 +60,7 @@ async function initCronJobs() {
     );
 }
 async function stopCronJobs() {
+  if (offerTask) { await offerTask.destroy(); offerTask=null; }
   if (financeTask) {
     await financeTask.destroy();
     financeTask = null;

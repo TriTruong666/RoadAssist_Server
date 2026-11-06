@@ -300,6 +300,7 @@ class Liveness {
   }
   static async run() {
     const Dispatch = require("./dispatch.service");
+    await require('./dispatch_offer.service').sweep();
     let cursor;
     // Walk stable UUID pages, not updatedAt: unchanged old rows must not starve later work.
     for (;;) {
