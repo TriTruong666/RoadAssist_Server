@@ -22,7 +22,7 @@ const BOUNDS = {
     towPerKm: [0, 1000000],
     waitingPerMinute: [0, 1000000],
   },
-  sepay: { commissionRate: [0, 1] },
+  sepay: { commissionRate: [0, 1], towCommissionRate: [0, 1] },
 };
 const defaults = Object.fromEntries(
   Object.entries(BOUNDS).map(([group, keys]) => [
@@ -52,7 +52,7 @@ class Settings {
           !Number.isFinite(value) ||
           value < bounds[0] ||
           value > bounds[1] ||
-          (key !== "commissionRate" && !Number.isInteger(value))
+          (!["commissionRate", "towCommissionRate"].includes(key) && !Number.isInteger(value))
         )
           fail("VALIDATION_ERROR", `Giá trị ${group}.${key} không hợp lệ`, 400);
       }

@@ -121,6 +121,7 @@ module.exports = {
     holdDays: Number(process.env.PAYOUT_HOLD_DAYS ?? 7),
     paymentTtlMinutes: Number(process.env.PAYMENT_TTL_MINUTES ?? 15),
     commissionRate: Number(process.env.PLATFORM_COMMISSION_RATE ?? 0.1),
+    towCommissionRate: Number(process.env.PLATFORM_TOW_COMMISSION_RATE ?? 0.15),
   },
   maps: {
     vietmapBaseUrl: process.env.VIETMAP_BASE_URL || "https://maps.vietmap.vn",
