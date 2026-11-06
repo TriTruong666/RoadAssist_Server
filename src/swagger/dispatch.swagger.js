@@ -379,4 +379,12 @@ operation(
   [],
   true,
 );
+schemas.DispatchQuote.properties.items = { type:'array', minItems:1, maxItems:100, items:{ type:'object', required:['name','qty','unitPrice'], properties:{ name:{type:'string',minLength:1,maxLength:200},qty:{type:'integer',minimum:1,maximum:1000},unitPrice:{type:'integer',minimum:0,maximum:100000000} } } };
+paths['/api/v1/dispatch/{id}/quote'].post.description = 'Item totals must equal amount. QUOTED amendments keep version history and cancel pending promises; received or approved quotes require support.';
+paths['/api/v1/dispatch/{id}/approve-quote'].post.requestBody = { content:{ 'application/json':{schema:{type:'object',properties:{...revision,method:{type:'string',enum:['CASH','SEPAY'],description:'CASH creates/reuses a promise atomically.'}}}}}};
 module.exports = { schemas, paths };
+
+Object.assign(schemas.DispatchTicket.properties, { offeredProviderId:{...uuid,nullable:true}, offerExpiresAt:{type:'string',format:'date-time',nullable:true}, offerPublicAt:{type:'string',format:'date-time',nullable:true} });
+paths['/api/v1/dispatch/offers/stream'] = {get:{tags:['Dispatch'],summary:'Current private offers and eligible public feed through SSE',security:[{cookieAuth:[]}],responses:{200:{description:'Event offers: {items,feed}; reconnect replays the current snapshot.',content:{'text/event-stream':{schema:{type:'string'}}}}}}};
+paths['/api/v1/dispatch/offers/mine'] = {get:{tags:['Dispatch'],summary:'Current account private offers snapshot',security:[{cookieAuth:[]}],responses:{200:{description:'{success:true,data:{items:[summary]}}'}}}};
+paths['/api/v1/dispatch/{id}/reject-offer'] = {post:{tags:['Dispatch'],summary:'Release private offer to all eligible providers; rejector may accept later',security:[{cookieAuth:[]}],parameters:[{name:'id',in:'path',required:true,schema:uuid}],responses:{200:{description:'Offer released'},404:{description:'Not the proposed provider'},409:{description:'Ticket no longer pending'}}}};

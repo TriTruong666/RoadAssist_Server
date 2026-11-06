@@ -26,6 +26,10 @@ class Notifications {
     return {
       id: ticket.id,
       code: ticket.code,
+      offeredProviderId: ticket.offeredProviderId,
+      offerExpiresAt: ticket.offerExpiresAt,
+      description: ticket.description,
+      pickupAddress: ticket.pickupAddress,
       type: ticket.type,
       status: ticket.status,
       pickupLatitude: Math.round(ticket.pickupLatitude * 1000) / 1000,
@@ -54,10 +58,10 @@ class Notifications {
         suspended: false,
         accepting: true,
         ...(ticket.targetProviderId && { id: ticket.targetProviderId }),
-        [Op.and]: require("sequelize").literal(`(${distance}) <= 15000`),
+        [Op.and]: require("sequelize").literal(`(${distance}) <= COALESCE("Provider"."receive_radius_km", 10) * 1000`),
       },
       transaction,
-      order: [["id", "ASC"]],
+      order: [[require("sequelize").literal(distance), "ASC"], ["createdAt", "ASC"], ["id", "ASC"]],
     });
     const result = [];
     for (const p of rows) {
@@ -73,10 +77,15 @@ class Notifications {
         transaction,
       });
       if (owner?.status !== "ACTIVE" || !owner.emailVerifiedAt) continue;
-      if ((await Availability.describe(p, transaction)).available)
+      if ((await Availability.describe(p, transaction)).available) {
+        if (p.kind !== 'SHOP') {
+          try { require('./dispatch_policy.service').freshFix(p); } catch { continue; }
+        }
         result.push(p);
+      }
     }
-    return result;
+    const held = ticket.offeredProviderId && !ticket.offerPublicAt && ticket.offerExpiresAt > new Date();
+    return held ? result.filter(p => p.id === ticket.offeredProviderId) : result;
   }
   static async enqueue(ticket, actorId, event, transaction) {
     const recipients = new Set([ticket.userId]);
@@ -104,6 +113,7 @@ class Notifications {
       });
       if (shop) recipients.add(shop.userId);
     }
+    if (PENDING.includes(ticket.status)) await require('./dispatch_offer.service').reserve(ticket, transaction);
     const urgent = new Set();
     if (PENDING.includes(ticket.status))
       for (const p of await this.candidates(ticket, transaction)) {
@@ -121,6 +131,7 @@ class Notifications {
         { transaction },
       );
     transaction.afterCommit(async () => {
+      require('./dispatch_offer.service').signal();
       try {
         await this.deliver();
       } catch (error) {

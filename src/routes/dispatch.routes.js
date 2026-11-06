@@ -4,6 +4,10 @@ const validate = require("../middlewares/validate.middleware");
 const R = require("../common/response.handler");
 const Service = require("../services/dispatch.service");
 router.use(require("../middlewares/auth.middleware").protect);
+const Offers = require('../services/dispatch_offer.service');
+router.get('/offers/stream', (req,res) => Offers.stream(req,res));
+router.get('/offers/mine', async (req,res) => R.success(res,{items:await Offers.mine(req.user)}));
+router.post('/:id/reject-offer', schema.id, validate, async (req,res) => R.success(res,await Offers.release(req.user,req.validated.id)));
 for (const [path, type, validation] of [
   ["walk-in", "WALK_IN", schema.walkIn],
   ["sos", "SOS", schema.sos],
@@ -92,7 +96,7 @@ for (const [action, validation] of [
   ["arrive", []],
   ["in-shop", []],
   ["quote", schema.quote],
-  ["approve-quote", []],
+  ["approve-quote", schema.approval],
   ["start", []],
   ["ready", []],
   ["resolve", []],
