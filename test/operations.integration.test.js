@@ -11,6 +11,7 @@ else {
   const suffix = randomUUID().replaceAll("-", "");
   Object.assign(process.env, {
     NODE_ENV: "test",
+    PAYMENT_GATEWAY_MODE: "live",
     DB_SCHEMA: `ops_test_${suffix}`,
     AUTH_REDIS_PREFIX: `test:${suffix}:auth:`,
     PROVIDER_REDIS_PREFIX: `test:${suffix}:provider:`,
@@ -173,12 +174,18 @@ else {
     assert.equal(response.status, status, JSON.stringify(json));
     return json.data === undefined ? json : json.data;
   }
+  async function receiveCash(ticket) {
+    const items = await Item.findAll({where:{ticketId:ticket.id}});
+    const payments = await Pay.findAll({where:{billItemId:{[Op.in]:items.map(i=>i.id)},method:'CASH',status:'PENDING'}});
+    for (const payment of payments) await require('../src/services/payment.service').confirmCash({userId:payment.providerUserId},payment.id);
+  }
   const act = async (actor, ticket, action, body = {}, status = 200) => {
     if (["start", "resolve"].includes(action))
       await require("./handover.fixture")(
         ticket.id,
         action === "start" ? "PICKUP" : "DELIVERY",
       );
+    if (action === 'resolve' && status === 200) await receiveCash(ticket);
     return request(
       actor,
       "POST",
@@ -231,6 +238,12 @@ else {
     );
   }
   async function match(t, p = tow, actor = tower) {
+    // Public dispatch scenarios start after the selected partner declines first refusal.
+    const held=await Ticket.findByPk(t.id);
+    if (held.offeredProviderId && held.offeredProviderId!==p.id && !held.offerPublicAt) {
+      const selected=await Provider.findByPk(held.offeredProviderId);
+      await require('../src/services/dispatch_offer.service').release({userId:selected.userId},t.id);
+    }
     return act(actor, t, "accept", { providerId: p.id });
   }
   async function book(t, actor = shopper) {
@@ -269,7 +282,9 @@ else {
     const funding = await cashFor(t, actor);
     await act(actor, t, "approve-quote");
     await act(shopper, t, "ready");
-    await act(actor, t, "resolve");
+    // Persisted unpaid completions from the previous contract remain collectible.
+    await Ticket.update({status:'4', resolvedAt:new Date()}, {where:{id:t.id}});
+    await require('../src/services/finance_lock.service').journey(t.journeyId,null,transaction => require('../src/services/bill.service').syncJourney(t.journeyId,transaction));
     return { ticket: t, ...funding };
   }
   async function newQuoted(actor = rider) {
@@ -1218,6 +1233,7 @@ else {
     await confirmProof(rider, t, h, 404);
     await confirmProof(shopper2, t, h, 404);
     await confirmProof(shopper, t, h);
+    await receiveCash(t);
     await request(rider, "POST", `/dispatch/${t.id}/resolve`, {});
     const rows = await request(rider, "GET", `/dispatch/${t.id}/handovers`);
     assert.equal(rows.length, 2);
@@ -1252,6 +1268,7 @@ else {
     const next = await proposeProof(t, "DELIVERY");
     assert.equal(next.version, 2);
     await confirmProof(shopper2, t, next);
+    await receiveCash(t);
     await request(rider, "POST", `/dispatch/${t.id}/resolve`, {});
     assert.equal((await M.Handover.findByPk(old.id)).status, "SUPERSEDED");
   });
@@ -1756,6 +1773,7 @@ else {
     await request(rider, "POST", `/dispatch/${t.id}/resolve`, {}, 409);
     const h = await proposeProof(t, "DELIVERY");
     await confirmProof(rider, t, h);
+    await receiveCash(t);
     await request(rider, "POST", `/dispatch/${t.id}/resolve`, {});
     await assert.rejects(
       () =>

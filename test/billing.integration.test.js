@@ -272,6 +272,28 @@ else {
     await db.dropSchema(process.env.DB_SCHEMA, { cascade: true });
     await db.close();
   });
+  test("rider requests rescue with incident vehicle without registering a profile", async () => {
+    const ticket = await request(rider, "POST", "/dispatch/sos", {
+      incidentVehicle: { type: "BIKE" },
+      pickupLatitude: point.latitude,
+      pickupLongitude: point.longitude,
+      description: "Xe hỏng giữa đường",
+    }, 201);
+    assert.equal(ticket.vehicleProfileId, null);
+    assert.equal(ticket.vehicleSnapshot.type, "BIKE");
+    assert.equal(await Vehicle.count({ where: { userId: rider.userId } }), 0);
+    const tow = await request(rider, "POST", "/dispatch/tow", {
+      incidentVehicle: { type: "CAR", length: 4.5, weightKg: 1500 },
+      pickupLatitude: point.latitude,
+      pickupLongitude: point.longitude,
+      dropoffLatitude: point.latitude + 0.01,
+      dropoffLongitude: point.longitude + 0.01,
+    }, 201);
+    assert.equal(tow.vehicleProfileId, null);
+    assert.equal(tow.requirements.vehicleWeightKg, 1500);
+    assert.equal(await Vehicle.count({ where: { userId: rider.userId } }), 0);
+  });
+
   test("server creates one journey bill and enforces rider ownership, allocations and payment idempotency", async () => {
     const s = await quote();
     assert.equal(await Bill.count(), 1);
@@ -773,40 +795,39 @@ else {
     );
     assert.equal(batch.net, "4504.00");
   });
-  test("multiple journey tickets share one bill and one QR allocates independently to each provider", async () => {
+  test("linked tickets have independent bills, payments and approval gates", async () => {
     const a = await quote("100000");
     const b = await quote("50000", rider, shop2, provider2);
-    await Ticket.update(
-      { journeyId: a.ticket.journeyId },
-      { where: { id: b.ticket.id } },
-    );
-    const q = db.getQueryInterface().queryGenerator;
-    await db.query(
-      `DELETE FROM ${q.quoteTable(Item.getTableName())} WHERE bill_id = :bill`,
-      { replacements: { bill: b.bill.id } },
-    );
-    await Bill.destroy({ where: { id: b.bill.id } });
-    await Locks.journey(a.ticket.journeyId, null, (transaction) =>
-      Bills.syncJourney(a.ticket.journeyId, transaction),
-    );
-    const detail = await request(rider, "GET", `/bills/${a.bill.id}`);
-    assert.equal(detail.totalAmount, "150000.00");
-    assert.equal(detail.paidAmount, "0.00");
-    const intent = await request(
-      rider,
-      "POST",
-      "/payments/create-sepay-qr",
-      { billId: a.bill.id },
-      201,
-    );
-    assert.equal(intent.amount, "150000.00");
-    assert.equal(new Set(intent.payments.map((p) => p.providerId)).size, 2);
+    await Ticket.update({ journeyId: a.ticket.journeyId }, { where: { id: b.ticket.id } });
+    await Bill.update({ journeyId: a.ticket.journeyId }, { where: { id: b.bill.id } });
+    const detail = await request(rider, 'GET', `/bills/${a.bill.id}`);
+    assert.equal(detail.totalAmount, '100000.00');
+    assert.equal(detail.items.length, 1);
+    const intent = await choose(a);
+    assert.equal(intent.amount, '100000.00');
     await hook(payload(intent));
-    await wait(
-      async () => (await Bill.findByPk(a.bill.id)).paidAmount === "150000.00",
-    );
-    await act(rider, a.ticket, "approve-quote");
-    await act(rider, b.ticket, "approve-quote");
+    await wait(async () => (await Bill.findByPk(a.bill.id)).paidAmount === '100000.00');
+    await act(rider, a.ticket, 'approve-quote');
+    await act(rider, b.ticket, 'approve-quote', {}, 403);
+    assert.equal((await Bill.findByPk(b.bill.id)).paidAmount, '0.00');
+  });
+  test("itemized amendments invalidate pending promises and lock after approval", async () => {
+    const s = await quote('100000');
+    const old = await choose(s, 'CASH');
+    await act(provider, s.ticket, 'quote', { amount: 150000, items: [{ name:'Lốp xe', qty: 2, unitPrice:75000 }] });
+    const t = await Ticket.findByPk(s.ticket.id);
+    assert.equal(t.quoteVersion, 2);
+    assert.equal(t.quoteHistory.length, 1);
+    assert.equal(t.quoteItems[0].amount, '150000.00');
+    assert.equal((await Intent.findByPk(old.id)).status, 'CANCELLED');
+    await act(provider, s.ticket, 'quote', { amount: 99999, items: [{name:'Lốp',qty:1,unitPrice:100000}] }, 400);
+    await act(rider, s.ticket, 'approve-quote', { method:'CASH' });
+    await act(provider, s.ticket, 'quote', { amount:160000 }, 409);
+    await act(provider, s.ticket, 'ready');
+    await act(rider, s.ticket, 'resolve', {}, 409);
+    const payment = await Pay.findOne({where:{billId:s.bill.id,status:'PENDING'}});
+    await request(provider, 'POST','/payments/confirm-cash',{paymentId:payment.id});
+    await act(rider,s.ticket,'resolve');
   });
 
   test("admin can reconcile a verified wrong memo without mutating the original receipt or bypassing bank checks", async () => {
@@ -1156,4 +1177,16 @@ else {
       1,
     );
   });
+  test('legacy journey unique migration is repeatable and retains all financial rows', async () => {
+    const s = await quote('100000');
+    const q = db.getQueryInterface();
+    await q.addConstraint(Bill.getTableName(), { fields:['journey_id'], type:'unique', name:'legacy_journey_unique_test' });
+    await require('../src/config/billing.migrations')(db);
+    await require('../src/config/billing.migrations')(db);
+    const b = await quote('50000',rider,shop2,provider2);
+    await Bill.update({journeyId:s.ticket.journeyId},{where:{id:b.bill.id}});
+    assert.equal((await Bill.findByPk(s.bill.id)).totalAmount,'100000.00');
+    assert.equal((await Bill.findByPk(b.bill.id)).totalAmount,'50000.00');
+  });
+
 }

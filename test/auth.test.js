@@ -49,10 +49,10 @@ test('startup refuses missing or short JWT secrets', () => {
     assert.throws(() => JWT.assertConfigured(), /32 bytes/);
   } finally { config.jwt.secret = old; }
 });
-test('Swagger describes all nineteen Auth/User/Vehicle operations', () => {
+test('Swagger describes all twenty-two Auth/User/Vehicle operations', () => {
   const { paths } = require('../src/config/swagger.paths');
   const count = Object.values(paths).reduce((total, value) => total + Object.keys(value).length, 0);
-  assert.equal(count, 19);
+  assert.equal(count, 22);
   assert.deepEqual(paths['/api/v1/auth/login'].post.security, []);
   assert.deepEqual(paths['/api/v1/users/me'].get.security, [{ cookieAuth: [] }]);
 });

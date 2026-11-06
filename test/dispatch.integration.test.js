@@ -174,13 +174,20 @@ else {
     return request(actor, "POST", `/dispatch/${ticket.id}/${name}`, body, status);
   };
   async function accept(ticket, p = mobile, actor = mobileOwner) {
+    // Older scenarios exercise public dispatch; release any first-refusal offer first.
+    const held = await Ticket.findByPk(ticket.id);
+    if (held.offeredProviderId && held.offeredProviderId !== p.id && !held.offerPublicAt) {
+      const offered = await Provider.findByPk(held.offeredProviderId);
+      await require('../src/services/dispatch_offer.service').release({userId:offered.userId},held.id);
+    }
     return action(actor, ticket, "accept", { providerId: p.id });
   }
-  async function fund(ticket, method = 'CASH', status = 'PENDING', extra = {}) {
+  async function fund(ticket, method = 'CASH', status = 'CONFIRMED', extra = {}) {
     const t = await Ticket.findByPk(ticket.id);
     const Locks = require('../src/services/finance_lock.service');
     return Locks.journey(t.journeyId, null, async transaction => {
-      const bill = await require('../src/services/bill.service').syncJourney(t.journeyId,transaction);
+      await require('../src/services/bill.service').syncJourney(t.journeyId,transaction);
+      const bill = await require('../src/services/bill.service').forTicket(t,transaction);
       const items = await Item.findAll({where:{billId:bill.id,ticketId:t.id},transaction});
       const code = require('../src/services/payment.service').code();
       const intent = await PaymentIntent.create({billId:bill.id,userId:t.userId,code,method,amount:extra.amount||t.totalAmount,receivedAmount:method==='SEPAY'&&status!=='PENDING'?(extra.amount||t.totalAmount):'0.00',status:status==='PENDING'?'PENDING':'HELD',expiresAt:new Date(Date.now()+3600000),fingerprint:randomUUID()},{transaction});
@@ -358,7 +365,8 @@ else {
     await accept(t, shop, shopper);
     await action(shopper, t, "in-shop");
     await action(shopper, t, "quote", { amount: "100000.00" });
-    await action(shopper, t, "quote", { amount: "100001" }, 409);
+    await action(shopper, t, "quote", { amount: "100001" });
+    await action(shopper, t, "quote", { amount: "100000" });
     await action(other, t, "approve-quote", {}, 404);
     await action(rider, t, "approve-quote", {}, 403);
     const payment = await fund(t, "SEPAY", "PENDING");
@@ -1025,4 +1033,67 @@ else {
       await shop.update({ maxConcurrentJobs: 20 });
     }
   });
+  test('nearest compatible provider gets a private five-minute offer; rejection publishes without exclusion', async () => {
+    await Provider.update({accepting:false},{where:{kind:'MOBILE_SHOP',id:{[Op.notIn]:[mobile.id,mobile2.id]}}});
+    await mobile.update({accepting:true,receiveRadiusKm:10});
+    await move(mobile);
+    await move(mobile2,{latitude:point.latitude+0.005,longitude:point.longitude});
+    const t=await create('sos',{requiredCapabilities:['TYRE_REPAIR']});
+    const held=await Ticket.findByPk(t.id);
+    assert.equal(held.offeredProviderId,mobile.id);
+    assert.ok(held.offerExpiresAt-Date.now()>295000);
+    assert.equal((await Service.feed(mobileOwner2,{providerId:mobile2.id})).some(row=>row.id===t.id),false);
+    await request(mobileOwner2,'GET',`/dispatch/${t.id}`,undefined,404);
+    await request(mobileOwner2,'POST',`/dispatch/${t.id}/accept`,{providerId:mobile2.id},409);
+    await request(mobileOwner2,'POST',`/dispatch/${t.id}/reject-offer`,{},404);
+    await request(mobileOwner,'POST',`/dispatch/${t.id}/reject-offer`,{});
+    assert.ok((await Service.feed(mobileOwner2,{providerId:mobile2.id})).some(row=>row.id===t.id));
+    assert.deepEqual((await Ticket.findByPk(t.id)).formerAssignedShopIds,[]);
+    await request(mobileOwner,'POST',`/dispatch/${t.id}/accept`,{providerId:mobile.id});
+  });
+  test('expired offers become public and radius is enforced on feed and accept', async () => {
+    await Provider.update({accepting:false},{where:{kind:'MOBILE_SHOP',id:{[Op.notIn]:[mobile.id,mobile2.id]}}});
+    await move(mobile); await move(mobile2,{latitude:point.latitude+0.005,longitude:point.longitude});
+    await mobile.update({receiveRadiusKm:10});
+    const t=await create();
+    await Ticket.update({offerExpiresAt:new Date(Date.now()-1)},{where:{id:t.id}});
+    await require('../src/services/dispatch_offer.service').sweep();
+    assert.ok((await Ticket.findByPk(t.id)).offerPublicAt);
+    await request(mobileOwner2,'POST',`/dispatch/${t.id}/accept`,{providerId:mobile2.id});
+    await request(mobileOwner,'POST',`/providers/${mobile.id}/toggle-duty`,{accepting:true,receiveRadiusKm:1,...gps()});
+    assert.equal((await Provider.findByPk(mobile.id)).receiveRadiusKm,1);
+    await request(mobileOwner,'POST',`/providers/${mobile.id}/toggle-duty`,{accepting:true,receiveRadiusKm:0,...gps()},400);
+    const far=await create('sos',{pickupLatitude:point.latitude+0.03});
+    assert.equal((await Service.feed(mobileOwner,{providerId:mobile.id})).some(row=>row.id===far.id),false);
+    await request(mobileOwner,'POST',`/dispatch/${far.id}/accept`,{providerId:mobile.id},409);
+    await mobile.update({receiveRadiusKm:10});
+  });
+  test('SSE replays only the current account private offers and closes cleanly',async()=>{
+    const t=await create();
+    const held=await Ticket.findByPk(t.id);
+    const selected=await Provider.findByPk(held.offeredProviderId);
+    const actor=selected.userId===mobileOwner.userId?mobileOwner:mobileOwner2;
+    const controller=new AbortController();
+    try {
+      const res=await fetch(base+'/api/v1/dispatch/offers/stream',{headers:{Cookie:`road_as_token=${actor.token}`},signal:controller.signal});
+      assert.match(res.headers.get('content-type'),/text\/event-stream/);
+      const reader=res.body.getReader();
+      const first=await reader.read();
+      assert.match(new TextDecoder().decode(first.value),new RegExp(t.id));
+      await reader.cancel();
+    } finally {controller.abort();}
+  });
+
+  test('concurrent requests reserve different provider accounts', async()=>{
+    await Provider.update({accepting:false},{where:{kind:'MOBILE_SHOP',id:{[Op.notIn]:[mobile.id,mobile2.id]}}});
+    await mobile.update({accepting:true,receiveRadiusKm:10});
+    await mobile2.update({accepting:true,receiveRadiusKm:10});
+    await move(mobile);await move(mobile2);
+    const data={incidentVehicle:{type:'BIKE'},pickupLatitude:point.latitude,pickupLongitude:point.longitude};
+    const tickets=await Promise.all([Service.create(rider,'SOS',data),Service.create(other,'SOS',data)]);
+    const rows=await Ticket.findAll({where:{id:{[Op.in]:tickets.map(t=>t.id)}}});
+    assert.equal(new Set(rows.map(t=>t.offeredProviderId)).size,2);
+    assert.ok(rows.every(t=>t.offeredProviderId));
+  });
+
 }
