@@ -19,6 +19,7 @@
     "infra:routing": "docker compose -f docker-compose.dev.yml --profile routing up -d valhalla",
     "infra:routing:logs": "docker compose -f docker-compose.dev.yml --profile routing logs -f valhalla",
     "seed:demo": "node scripts/seed-demo.js",
+    "seed:scenarios": "node scripts/seed-scenarios.js",
     "db:reset": "node scripts/reset-development.js"
   },
   "dependencies": {
