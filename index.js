@@ -79,6 +79,7 @@ async function startServer() {
     await require("./src/config/provider.migrations").prepareProviderSchema(
       sequelize,
     );
+    await require('./src/config/billing.migrations')(sequelize);
     await sequelize.sync(
       config.db.force_reset ? { force: true } : { alter: true },
     );

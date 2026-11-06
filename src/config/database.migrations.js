@@ -1,5 +1,9 @@
 const { Op } = require("sequelize");
 async function runStartupDatabaseMigrations(sequelize) {
+  const q = sequelize.getQueryInterface().queryGenerator;
+  const billTable = q.quoteTable(sequelize.models.Bill.getTableName());
+  const ticketTable = q.quoteTable(sequelize.models.DispatchTicket.getTableName());
+  await sequelize.query(`UPDATE ${billTable} b SET ticket_id = (SELECT MIN(t.id::text)::uuid FROM ${ticketTable} t WHERE t.journey_id=b.journey_id) WHERE b.ticket_id IS NULL AND (SELECT COUNT(*) FROM ${ticketTable} t WHERE t.journey_id=b.journey_id)=1`);
   await require("./operations.migrations")(sequelize);
   while (await require("./chat.migrations").migrateHazardChat()) {
     /* bounded migration batches */
