@@ -19,6 +19,10 @@ module.exports = sequelize.define(
     kind: { type: DataTypes.ENUM(...PROVIDER_KINDS), allowNull: false },
     name: { type: DataTypes.STRING(120), allowNull: false },
     phone: { type: DataTypes.STRING(20), allowNull: false },
+    towBaseFee: { type: DataTypes.INTEGER, field: "tow_base_fee" },
+    towPerKmFee: { type: DataTypes.INTEGER, field: "tow_per_km_fee" },
+    callOutFee: { type: DataTypes.INTEGER, field: "call_out_fee" },
+    travelPerKmFee: { type: DataTypes.INTEGER, field: "travel_per_km_fee" },
     vehicleProfileId: { type: DataTypes.UUID, field: "vehicle_profile_id" },
     plateNumber: { type: DataTypes.STRING(20), field: "plate_number" },
     licenseNumber: { type: DataTypes.STRING(50), field: "license_number" },
@@ -50,6 +54,7 @@ module.exports = sequelize.define(
       allowNull: false,
       defaultValue: "ACTIVE",
     },
+    receiveRadiusKm: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 10, field: "receive_radius_km", validate: { min: 1, max: 50 } },
     accepting: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,

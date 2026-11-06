@@ -165,6 +165,10 @@ class ProviderService {
     return this.mutate(actor, id, async ({ user, profile, vehicle, transaction }) => {
       if (actor.userId !== user.userId) throw new ForbiddenException();
       this.assertDuty(profile, vehicle);
+      if (data.receiveRadiusKm !== undefined) {
+        if (!Number.isInteger(data.receiveRadiusKm) || data.receiveRadiusKm < 1 || data.receiveRadiusKm > 50) throw new BadRequestException('Bán kính phải từ 1 đến 50 km');
+        await profile.update({ receiveRadiusKm: data.receiveRadiusKm }, { transaction });
+      }
       if (data.accepting && profile.kind !== 'SHOP') await this.recordPosition(profile, data, transaction, true);
       else {
         if (profile.kind === 'SHOP' && (data.latitude !== undefined || data.longitude !== undefined)) throw new BadRequestException('Tiệm cố định không gửi GPS heartbeat');

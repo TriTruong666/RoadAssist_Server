@@ -86,6 +86,7 @@ function fields(update = false) {
       .withMessage(
         "Use MON–SUN with HH:MM-HH:MM; overnight opening is supported",
       ),
+    ...["towBaseFee", "towPerKmFee", "callOutFee", "travelPerKmFee"].map(field => body(field).optional({ nullable: true }).isInt({ min: 0, max: 10000000 }).toInt()),
     body("confirmNearby").optional().isBoolean({ strict: true }),
   ];
 }
@@ -96,7 +97,7 @@ module.exports = {
     ...fields(true),
     body("resubmit").optional().isBoolean({ strict: true }),
   ],
-  duty: [body("accepting").isBoolean({ strict: true }), ...gps()],
+  duty: [body("accepting").isBoolean({ strict: true }), body("receiveRadiusKm").optional().isInt({ min: 1, max: 50 }).toInt(), ...gps()],
   location: [body("providerId").isUUID(4), ...gps(), latitude(), longitude()],
   deny: [
     body("reason").isString().bail().trim().isLength({ min: 1, max: 500 }),

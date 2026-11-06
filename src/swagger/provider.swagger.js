@@ -115,3 +115,15 @@ Object.assign(schemas.Provider.properties, {
 
 paths['/api/v1/providers/{id}/documents'].post.description = 'Upload PDF or JPEG/PNG/WebP up to 5MB as multipart for LICENSE_PHOTO/BUSINESS_DOCUMENT. VEHICLE_PHOTO accepts images only. Alternatively submit JSON {documentType: "VEHICLE_PHOTO", assetId} to reuse a photo uploaded to the currently linked vehicle. The asset must belong to the actor and exactly match the provider vehicle. Existing evidence version, duplicate and approval checks apply.';
 paths['/api/v1/providers/{id}/documents'].post.requestBody.content['application/json'] = { schema: { type: 'object', required: ['documentType', 'assetId'], properties: { documentType: { type: 'string', enum: ['VEHICLE_PHOTO'] }, assetId: uuid() } } };
+
+for (const name of ['CreateProviderRequest','UpdateProviderRequest','Provider','PublicProvider']) {
+  Object.assign(schemas[name].properties, {
+    towBaseFee: {type:'integer',nullable:true,minimum:100000,maximum:300000,description:'TOW only'},
+    towPerKmFee: {type:'integer',nullable:true,minimum:8000,maximum:15000,description:'TOW only'},
+    callOutFee: {type:'integer',nullable:true,minimum:0,maximum:100000,description:'MOBILE_SHOP only'},
+    travelPerKmFee: {type:'integer',nullable:true,minimum:3000,maximum:10000,description:'MOBILE_SHOP only'},
+  });
+}
+
+schemas.ProviderDutyRequest.properties.receiveRadiusKm = { type:'integer', minimum:1, maximum:50, default:10, description:'Receive jobs within this many km from the provider trusted location.' };
+schemas.Provider.properties.receiveRadiusKm = {type:'integer',minimum:1,maximum:50,default:10};

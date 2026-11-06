@@ -1,7 +1,8 @@
 const { REPAIR_CAPABILITIES, TOW_METHODS } = require('../common/provider.constants');
 const { BadRequestException } = require('../common/exceptions/BaseException');
 const errors = require('../common/exceptions/error_codes');
-const FIELDS = ['capabilities', 'supportedVehicleTypes', 'maxConcurrentJobs', 'towMaxWeightKg', 'towMaxWidth', 'towMaxHeight', 'towMaxLength', 'towMethods'];
+const PRICES = { towBaseFee: ['TOW', 100000, 300000], towPerKmFee: ['TOW', 8000, 15000], callOutFee: ['MOBILE_SHOP', 0, 100000], travelPerKmFee: ['MOBILE_SHOP', 3000, 10000] };
+const FIELDS = [...Object.keys(PRICES), 'capabilities', 'supportedVehicleTypes', 'maxConcurrentJobs', 'towMaxWeightKg', 'towMaxWidth', 'towMaxHeight', 'towMaxLength', 'towMethods'];
 function valid(profile) {
   if (!Array.isArray(profile.capabilities) || !profile.capabilities.length || !Array.isArray(profile.supportedVehicleTypes) || !profile.supportedVehicleTypes.length) return false;
   if (profile.kind === 'TOW') return profile.capabilities.every(value => value === 'TOWING') &&
@@ -10,6 +11,11 @@ function valid(profile) {
   return profile.capabilities.every(value => REPAIR_CAPABILITIES.includes(value));
 }
 function validate(profile) {
+  for (const [field, [kind, min, max]] of Object.entries(PRICES)) {
+    const value = profile[field];
+    if (value != null && (profile.kind !== kind || !Number.isInteger(value) || value < min || value > max))
+      throw new BadRequestException(`Giá ${field} không hợp lệ (${min}–${max}, ${kind})`);
+  }
   if (profile.kind !== 'SHOP' && profile.maxConcurrentJobs !== 1) throw new BadRequestException('Đối tác lưu động chỉ được nhận một cuốc trên một xe');
   if (profile.capabilities?.length && !profile.capabilities.every(value => profile.kind === 'TOW' ? value === 'TOWING' : REPAIR_CAPABILITIES.includes(value))) throw new BadRequestException(errors.PROVIDER_CAPABILITY_MISMATCH);
   if (profile.supportedVehicleTypes?.some(value => !['BIKE', 'CAR'].includes(value))) throw new BadRequestException(errors.PROVIDER_CAPABILITY_MISMATCH);
