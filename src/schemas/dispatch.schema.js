@@ -37,6 +37,15 @@ const assetIds = (min = 0) => [
 ];
 const base = [
   body("vehicleProfileId").optional().isUUID(),
+  body("incidentVehicle").optional().isObject(),
+  body("incidentVehicle.type").if(body("incidentVehicle").exists()).isIn(["BIKE", "CAR"]),
+  body("incidentVehicle.plateNumber").optional().isString().trim().isLength({ max: 20 }),
+  body("incidentVehicle.brand").optional().isString().trim().isLength({ max: 50 }),
+  body("incidentVehicle.modelName").optional().isString().trim().isLength({ max: 50 }),
+  body("incidentVehicle.length").optional().isFloat({ min: 0.5, max: 20 }).toFloat(),
+  body("incidentVehicle.weightKg").optional().isFloat({ min: 20, max: 50000 }).toFloat(),
+  body("incidentVehicle.width").optional().isFloat({ min: 0.3, max: 3 }).toFloat(),
+  body("incidentVehicle.height").optional().isFloat({ min: 0.5, max: 3 }).toFloat(),
   body("clientRequestId").optional().isUUID(),
   body("description").optional().isString().trim().isLength({ max: 2000 }),
   ...assetIds(),
@@ -76,6 +85,7 @@ module.exports = {
   ],
   id: [param("id").isUUID()],
   revision,
+  approval: [body("method").optional().isIn(["CASH", "SEPAY"])],
   location,
   destination,
   walkIn: [...base, body("providerId").isUUID(), ...location],
@@ -83,6 +93,10 @@ module.exports = {
   tow: [...base, ...pickup, ...destination],
   accept: [body("providerId").isUUID(), ...revision],
   quote: [
+    body("items").optional().isArray({ min: 1, max: 100 }),
+    body("items.*.name").isString().trim().isLength({ min: 1, max: 200 }),
+    body("items.*.qty").isInt({ min: 1, max: 1000 }).toInt(),
+    body("items.*.unitPrice").isInt({ min: 0, max: 100000000 }).toInt(),
     body("amount").custom((value) => {
       if (Money.cents(value) % 100)
         throw new Error("VND phải là số tiền nguyên đồng");

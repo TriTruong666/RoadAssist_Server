@@ -16,10 +16,13 @@ module.exports = db.define(
     userId: { type: D.UUID, allowNull: false, field: "user_id" },
     vehicleProfileId: {
       type: D.UUID,
-      allowNull: false,
+      allowNull: true,
       field: "vehicle_profile_id",
     },
     providerId: { type: D.UUID, field: "provider_id" },
+    offeredProviderId: { type: D.UUID, field: "offered_provider_id" },
+    offerExpiresAt: { type: D.DATE, field: "offer_expires_at" },
+    offerPublicAt: { type: D.DATE, field: "offer_public_at" },
     targetProviderId: { type: D.UUID, field: "target_provider_id" },
     type: { type: D.ENUM("WALK_IN", "SOS", "TOW"), allowNull: false },
     status: {
@@ -62,6 +65,10 @@ module.exports = db.define(
     callOutFee: money("call_out_fee"),
     travelFee: money("travel_fee"),
     quoteAmount: money("quote_amount", true),
+    quoteItems: { type: D.JSONB, field: "quote_items", defaultValue: [] },
+    quoteHistory: { type: D.JSONB, field: "quote_history", defaultValue: [] },
+    quoteVersion: { type: D.INTEGER, field: "quote_version", defaultValue: 0 },
+    towFare: { type: D.JSONB, field: "tow_fare" },
     waitingFee: money("waiting_fee"),
     totalAmount: money("total_amount"),
     quoteVoided: {
